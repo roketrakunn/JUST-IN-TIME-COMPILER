@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -33,10 +34,50 @@ void code_buffer_free( CodeBuffer * buf ){
     free(buf);
 }
 
+//========LEXER(PARSER STRUCTURES)==============
 
-//EMIT FUNCTIONS---THE FUN STUFF(FOR ME.)
+typedef enum { 
+
+    TOKEN_NUMBER, 
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_STAR,
+    TOKEN_SLASH, 
+    TOKEN_LPAREN, 
+    TOKEN_RPAREN,
+    TOKEN_EOF, //end of file (null terminator)
+    TOKEN_ERROR
+}TokenType ;
+
+//Token 
+
+typedef struct { 
+    TokenType type;
+    int value;          //Token number
+    char* start;         //For error messages 
+    int length;
+}Token;
+
+//----AST NODE TYPES
+
+typedef enum { 
+    NODE_NUMBER, 
+    NODE_BINARY_OP
+} NodeType;
 
 
+//----AST NODE 
+
+typedef struct{ 
+    NodeType type;              //Number or binary op
+    int value;                  //For node number
+    char op;                    //includes the basic math ops for now .. + , - , / ,* 
+    struct ASTNode* left;
+    struct ASTNode* right;
+} ASTNode;
+
+
+//-------EMIT FUNCTIONS---THE FUN STUFF(FOR ME.)
 void emit_byte(CodeBuffer* buf , uint8_t byte){ 
     if (buf -> size >= buf -> capacity){ 
         buf -> capacity *= 2; 
@@ -125,6 +166,145 @@ void emit_mov_ebx_eax(CodeBuffer* buf){
 void emit_ret(CodeBuffer* buf){ 
     emit_byte(buf, 0xC3);
 }
+
+
+//=========THE LEXER ===========
+
+typedef struct{ 
+    char* source;
+    char* current;
+} Lexer;
+
+void lexer_init(Lexer* lex , char* source){ 
+    lex->source = source ; 
+    lex->current = source;
+}
+
+char lexer_peak(Lexer* lex){ 
+    return *lex->current;
+}
+
+char lexer_advance(Lexer* lex){
+    char c = *lex->current; 
+
+    if (c != '\0') lex-> current++;
+    return c;
+}
+
+void lexer_skip_whitespace(Lexer* lex){ 
+    while ( lexer_peak(lex) ==' ' ||
+            lexer_peak(lex) =='\t' ||
+            lexer_peak(lex) =='\n' ||
+            lexer_peak(lex) =='\r'
+            ) {
+        lexer_advance(lex);
+    }
+}
+
+int is_digit(char c){
+    return c >= '0' && c <= '9';
+}
+
+Token lexer_next_token(Lexer* lex){
+    Token token; 
+    lexer_skip_whitespace(lex); 
+
+    token.start = lex -> current; 
+    token.length = 1; 
+
+    char c = lexer_peak(lex); 
+
+    if (c == '\0'){ 
+        token.type = TOKEN_EOF; 
+        return token;
+    }
+
+    if (is_digit(c)){ 
+        token.type = TOKEN_NUMBER; 
+        token.value = 0; 
+
+        while (isdigit(lexer_peak(lex))) {
+            token.value = token.value * 10 + (lexer_advance(lex) - '0'); 
+            token.length++;
+        }
+        token.length--;
+        return token;
+    }
+    lexer_advance(lex); 
+
+      switch (c) {
+        case '+': token.type = TOKEN_PLUS; break;
+        case '-': token.type = TOKEN_MINUS; break;
+        case '*': token.type = TOKEN_STAR; break;
+        case '/': token.type = TOKEN_SLASH; break;
+        case '(': token.type = TOKEN_LPAREN; break;
+        case ')': token.type = TOKEN_RPAREN; break;
+        default:
+            token.type = TOKEN_ERROR;
+            break;
+    }
+    return token;
+}
+
+//=========PARSER========
+
+typedef struct{ 
+    Lexer* lexer;
+    Token current;
+    Token previous;
+}Parser;
+
+void parser_init(Parser* p , Lexer* lex){ 
+    p -> lexer = lex; 
+    p -> current = lexer_next_token(lex);
+}
+
+void parser_advance(Parser* p){ 
+    p -> previous = p -> current; 
+    p -> current = lexer_next_token(p -> lexer); 
+}
+
+int parser_check(Parser* p, TokenType type){ 
+    return p->current.type == type;
+}
+
+int parser_match(Parser* p , TokenType type){ 
+    if (parser_check(p, type)) {
+        parser_advance(p);
+
+        return 1;
+    }
+    return 0;
+}
+
+//ADD FORWARD DECLERATIONS....next
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // -----EXECUTABLE MEMORY------//
 
