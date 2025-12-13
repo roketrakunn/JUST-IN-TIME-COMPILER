@@ -116,7 +116,7 @@ void emit_pop_eax(CodeBuffer* buf){
 //mov %eax , %ebx
 
 void emit_mov_ebx_eax(CodeBuffer* buf){
-    emit_byte(buf, 0x83);
+    emit_byte(buf, 0x89);
     emit_byte(buf, 0xC3);
 }
 
