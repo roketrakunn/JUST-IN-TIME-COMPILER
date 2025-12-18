@@ -11,6 +11,8 @@
 
 
 //The code buffer-------------
+//size => size of code you are trying to exec 
+//capacity => how much can the buffer contain
 typedef struct {
     uint8_t* code;
     size_t size;
@@ -19,6 +21,8 @@ typedef struct {
 
 //New buffer
 //Returns a new buffer
+//Params: 
+//       inttial_capacity(number of bytes you want) e.g 1024
 CodeBuffer* code_buffer_new(size_t initial_capacity) {
     CodeBuffer* buf = malloc(sizeof(CodeBuffer));
     buf->capacity = initial_capacity;
@@ -27,6 +31,8 @@ CodeBuffer* code_buffer_new(size_t initial_capacity) {
     return buf;
 }
 
+//Free the bytes that were given to you .. pass the adress of the buffer and it will be gone...later
+//Coz linux is ...lazy to do things now.
 void code_buffer_free(CodeBuffer* buf) {
     free(buf->code);
     free(buf);
@@ -34,15 +40,15 @@ void code_buffer_free(CodeBuffer* buf) {
 
 //========LEXER(PARSER STRUCTURES)==============
 typedef enum {
-    TOKEN_NUMBER,
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_STAR,
-    TOKEN_SLASH,
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-    TOKEN_EOF,
-    TOKEN_ERROR
+    TOKEN_NUMBER, // 0..9
+    TOKEN_PLUS,   // +
+    TOKEN_MINUS,  // -
+    TOKEN_STAR,   // *
+    TOKEN_SLASH,  // /
+    TOKEN_LPAREN, // (
+    TOKEN_RPAREN, // )
+    TOKEN_EOF,    //"0\"
+    TOKEN_ERROR   
 } TokenType;
 
 //Token
@@ -55,20 +61,28 @@ typedef struct {
 
 //----AST NODE TYPES
 typedef enum {
-    NODE_NUMBER,
-    NODE_BINARY_OP
+    NODE_NUMBER, //0..0
+    NODE_BINARY_OP //math arithmetics e.g +
 } NodeType;
 
 //----AST NODE
 typedef struct ASTNode {
-    NodeType type;
-    int value;
-    char op;
-    struct ASTNode* left;
-    struct ASTNode* right;
+    NodeType type; //Does this node contain a nunber or an operation
+    int value;      //Its value 0..9
+    char op;        //its char '+'
+    struct ASTNode* left;   //Pointer to left
+    struct ASTNode* right;  //Pointer to right
 } ASTNode;
 
-//-------EMIT FUNCTIONS---THE FUN STUFF(FOR ME.)
+//-------EMIT FUNCTIONS---THE FUN STUFF(FOR ME.) 
+// ------=THIS HAS ALOT OF BYTCODE ... I NEVER MEMORIZED ALL OF THIS(FOR NOW) , I USED THE objdumps
+//Just fills the buffer with bytcode 
+// The byte code is what the CPU gets and runs.
+// How it works: 
+//             Check if buffer size is greater than or less than the allocated mem we asked for 
+//             if so we double the allocated mem .. if we had 2004 bytes we will then have 4008 
+//             we then reallcate that amound
+//            if all was good and the capacity was sufficient you increment and insert the byte 
 void emit_byte(CodeBuffer* buf, uint8_t byte) {
     if (buf->size >= buf->capacity) {
         buf->capacity *= 2;
@@ -77,28 +91,33 @@ void emit_byte(CodeBuffer* buf, uint8_t byte) {
     buf->code[buf->size++] = byte;
 }
 
+//This is my favourite
+// It takes a buffer and an unsinged integer of 32 bits 
+// conevets the number to 4 bytes via bit maskings
+// If you do not knwo what bit masking is .. then you should no be reading this code.
+
 void emit_u32(CodeBuffer* buf, uint32_t value) {
-    emit_byte(buf, value & 0xFF);
-    emit_byte(buf, (value >> 8) & 0xFF);
-    emit_byte(buf, (value >> 16) & 0xFF);
-    emit_byte(buf, (value >> 24) & 0xFF);
+    emit_byte(buf, value & 0xFF); //last ... at the end 
+    emit_byte(buf, (value >> 8) & 0xFF);//second last byte
+    emit_byte(buf, (value >> 16) & 0xFF);//second byte 
+    emit_byte(buf, (value >> 24) & 0xFF);//First byte 
 }
 
 //instrution : mov imm_value , %eax
 void emit_mov_eax_imm(CodeBuffer* buf, uint32_t value) {
-    emit_byte(buf, 0xB8);
-    emit_u32(buf, value);
+    emit_byte(buf, 0xB8); //uses our emit byte to insert the bytecode for mov <imm> eax 
+    emit_u32(buf, value); //also uses the emit_32 func to convert the immidiate 32
 }
 
 //instrution : mov imm_value , %ebx => emit functio
 void emit_mov_ebx_imm(CodeBuffer* buf, uint32_t value) {
-    emit_byte(buf, 0xBB);
+    emit_byte(buf, 0xBB); 
     emit_u32(buf, value);
 }
 
 //emit add imm8 , %eax
 void emit_add_eax_imm8(CodeBuffer* buf, uint8_t value) {
-    emit_byte(buf, 0x83);
+    emit_byte(buf, 0x83);   
     emit_byte(buf, 0xC0);
     emit_byte(buf, value);
 }
