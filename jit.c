@@ -188,25 +188,30 @@ void emit_mov_eax_ebx(CodeBuffer* buf) {
 
 //=========THE LEXER ===========
 typedef struct {
-    char* source;
-    char* current;
+    char* source; //Original string parsed "5 + 10" points to the beginning of this
+    char* current; //where the current pointer is ... 
 } Lexer;
 
+//Initiate lxer
 void lexer_init(Lexer* lex, char* source) {
     lex->source = source;
     lex->current = source;
 }
 
+//returns adress of current char from source
 char lexer_peak(Lexer* lex) {
     return *lex->current;
 }
 
+//Steping on the bytes .. basic str reading
+//read until EOF 
+//returns current char  e.g .. space or a number or a op( + or _ ... ) 
 char lexer_advance(Lexer* lex) {
     char c = *lex->current;
     if (c != '\0') lex->current++;
     return c;
 }
-
+//SKIPS TABS SPACES AND NEW LINES AND ALL TO PRORESS TO THE NEXT VALID CHAR .. LIKE A NUMBER OR OP
 void lexer_skip_whitespace(Lexer* lex) {
     while (lexer_peak(lex) == ' ' || lexer_peak(lex) == '\t' || 
            lexer_peak(lex) == '\n' || lexer_peak(lex) == '\r') {
@@ -214,10 +219,18 @@ void lexer_skip_whitespace(Lexer* lex) {
     }
 }
 
+//check if char is a digit or what .. 
+//uses asci code bounds ( learn them if you do not get them)
 int is_digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+//Reads the source and returns the next "token"
+//Token is ... a token .. in this case its a didgit or the op .. or paranthesis
+//Still skipping the white spaces and tabs and all 
+//peak the source to get the char
+//and do basic checks like of end of file or mapping it to a number if it is or an op or paren
+//
 Token lexer_next_token(Lexer* lex) {
     Token token;
     lexer_skip_whitespace(lex);
