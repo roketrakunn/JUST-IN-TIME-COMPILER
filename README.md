@@ -34,6 +34,8 @@ The compiler can parse and execute expressions like:
 (5 + 10) * 2    → 30
 10 + 5 * 2      → 20  (multiplication first!)
 100 - 50 - 25   → 25  (left-to-right evaluation)
+100 / 5 
+(100 + 5) % 10
 ```
 
 ## How It Works
@@ -55,13 +57,13 @@ The compiler can parse and execute expressions like:
 ✅ Phase 1: Code generation and execution (COMPLETE)  
 ✅ Phase 2: Lexer and tokenizer (COMPLETE)  
 ✅ Phase 3: Full expression parser with precedence (COMPLETE)  
-⏳ Phase 4: Division operator  
+✅ Phase 4: Division operator  + modulo oparator ( %) 
 ⏳ Phase 5: Variables and assignment  
 ⏳ Phase 6: Control flow (if/else, loops)
 
 ## Future Enhancements
 
-- [ ] Division and modulo operators
+- [✅] Division and modulo operators
 - [ ] Unary operators (negation)
 - [ ] Variable storage and retrieval
 - [ ] Function definitions
