@@ -1,4 +1,4 @@
-
+ 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +44,7 @@ typedef enum {
     TOKEN_PLUS,   // +
     TOKEN_MINUS,  // -
     TOKEN_STAR,   // *
+    TOKEN_PERCENT,// % (modulo division)
     TOKEN_SLASH,  // /
     TOKEN_LPAREN, // (
     TOKEN_RPAREN, // )
@@ -198,6 +199,13 @@ void emit_idiv_ebx(CodeBuffer * buf){
     emit_byte(buf,0xFB);
 }
 
+//move the remainder in edx after idiv to eax
+//0x89 0xd0 => mov %edx , %eax
+void emit_mov_eax_edx(CodeBuffer *buf){ 
+    emit_byte(buf,0x89);
+    emit_byte(buf,0xD0);
+}
+
 //=========THE LEXER ===========
 typedef struct {
     char* source; //Original string parsed "5 + 10" points to the beginning of this
@@ -271,6 +279,7 @@ Token lexer_next_token(Lexer* lex) {
         case '-': token.type = TOKEN_MINUS; break;
         case '*': token.type = TOKEN_STAR; break;
         case '/': token.type = TOKEN_SLASH; break;
+        case '%':token.type = TOKEN_PERCENT; break; 
         case '(': token.type = TOKEN_LPAREN; break;
         case ')': token.type = TOKEN_RPAREN; break;
         default: token.type = TOKEN_ERROR; break;
@@ -359,13 +368,14 @@ ASTNode* parse_primary(Parser* p) {
 ASTNode* parse_factor(Parser* p) {
     ASTNode* left = parse_primary(p);
 
-    while (parser_match(p, TOKEN_STAR) || parser_match(p, TOKEN_SLASH)) {
+    while (parser_match(p, TOKEN_STAR) || parser_match(p, TOKEN_SLASH) || parser_match(p, TOKEN_PERCENT)) { 
         Token op = p->previous;
         ASTNode* right = parse_primary(p);
 
-        ASTNode* node = malloc(sizeof(ASTNode));
+        ASTNode* node = malloc(sizeof(ASTNode));;
+
         node->type = NODE_BINARY_OP;
-        node->op = (op.type == TOKEN_STAR) ? '*' : '/';
+        node->op = (op.type == TOKEN_STAR) ? '*' : (op.type == TOKEN_SLASH) ? '/' : '%';
         node->left = left;
         node->right = right;
         left = node;
@@ -452,6 +462,14 @@ void code_gen(ASTNode* node, CodeBuffer* buf) {
             emit_cdq(buf); //sing extented eax into eax:edx
             emit_idiv_ebx(buf);//eax = eax:edx / ebx  ... edx holds the remainder
             break;
+
+        case '%': 
+            // Modulo : eax - left and ebx - right
+            //want eax = left % right
+            emit_cdq(buf);
+            emit_idiv_ebx(buf);
+            emit_mov_eax_edx(buf); //move the remiander to eax (overwrite the quatient)
+            break;
     }
 }
 
@@ -527,14 +545,18 @@ int main() {
         "(5 + 10) * 2",
         "10 + 5 * 2",
         "100 - 50 - 25",
-        "15 / 3", //new test
-        "100 / 10", //another new test
-        "20 / 4", //once more
-        "(10 + 20) / 6", //last one 
+        "15 / 3", 
+        "100 / 10",
+        "20 / 4", 
+        "(10 + 20) / 6", 
+        "15 % 4", //new 
+        "100 % 7", //new
+        "20 % 6", //new
+        "(100 + 5) % 4", //new
         NULL
     };
     
-    int expected[] = {15, 15, 15, 30, 20, 25, 5 , 10 , 5 , 5};
+    int expected[] = {15, 15, 15, 30, 20, 25, 5 , 10 , 5 , 5, 3, 2, 2, 1};
     
     for (int i = 0; tests[i] != NULL; i++) {
         printf("Test %d: %s\n", i + 1, tests[i]);
