@@ -186,6 +186,18 @@ void emit_mov_eax_ebx(CodeBuffer* buf) {
     emit_byte(buf, 0xD8);
 }
 
+void emit_cdq(CodeBuffer *buf){ 
+    emit_byte(buf,0x99); //0x99 is op code for CDQ
+}
+
+//idiv - singed integer division.
+//0xF7 => idiv , %ebx division family instruction
+//0xFB divide by %ebx ( by whatever is in this register)
+void emit_idiv_ebx(CodeBuffer * buf){ 
+    emit_byte(buf,0xF7);
+    emit_byte(buf,0xFB);
+}
+
 //=========THE LEXER ===========
 typedef struct {
     char* source; //Original string parsed "5 + 10" points to the beginning of this
@@ -230,7 +242,6 @@ int is_digit(char c) {
 //Still skipping the white spaces and tabs and all 
 //peak the source to get the char
 //and do basic checks like of end of file or mapping it to a number if it is or an op or paren
-//
 Token lexer_next_token(Lexer* lex) {
     Token token;
     lexer_skip_whitespace(lex);
@@ -274,20 +285,34 @@ typedef struct {
     Token previous;
 } Parser;
 
+
+//Initialise parser 
+//Params: 
+//      parser adress
+//      lexer adress
+
 void parser_init(Parser* p, Lexer* lex) {
     p->lexer = lex;
     p->current = lexer_next_token(lex);
 }
 
+
+//what does this do: 
+//                  consumes a token and gets the next one
+//                  parse current to prev and then the next becomes current
 void parser_advance(Parser* p) {
     p->previous = p->current;
     p->current = lexer_next_token(p->lexer);
 }
 
+//helper for the method bellow
 int parser_check(Parser* p, TokenType type) {
     return p->current.type == type;
 }
 
+//checks token type... .kinda like confirm 
+//         e.g => parser_check( plus , TOKEN_TYPE_PLUS)
+//          returns 1 ( true) if not returns 0 ( false)
 int parser_match(Parser* p, TokenType type) {
     if (parser_check(p, type)) {
         parser_advance(p);
@@ -301,7 +326,13 @@ ASTNode* parse_expression(Parser* p);
 ASTNode* parse_term(Parser* p);
 ASTNode* parse_factor(Parser* p);
 
-//Primary : Number or expressio
+//Primary : Number or expression
+//if its a number create a new node of that number (when created it has null childs( left == right ==nul))
+//allocates that size of node ( basic c stuff)
+//sets value as previous ( consumed .. look for the next one)
+//curr is "prev"
+//returns adress to that node
+//
 ASTNode* parse_primary(Parser* p) {
     if (parser_match(p, TOKEN_NUMBER)) {
         ASTNode* node = malloc(sizeof(ASTNode));
@@ -312,6 +343,8 @@ ASTNode* parse_primary(Parser* p) {
         return node;
     }
 
+    //check expressions ( left_paran ( ")") and the other one as well)
+    //returns that expr
     if (parser_match(p, TOKEN_LPAREN)) {
         ASTNode* expr = parse_expression(p);
         parser_match(p, TOKEN_RPAREN);
@@ -414,7 +447,10 @@ void code_gen(ASTNode* node, CodeBuffer* buf) {
             emit_imul_eax_ebx(buf); // eax = left * right
             break;
         case '/':
-            printf("Division not implemented yet\n");
+            //division , eax = right , ebx = leeft 
+            //divide => left(ebx) / right(eax)
+            emit_cdq(buf); //sing extented eax into eax:edx
+            emit_idiv_ebx(buf);//eax = eax:edx / ebx  ... edx holds the remainder
             break;
     }
 }
@@ -491,10 +527,14 @@ int main() {
         "(5 + 10) * 2",
         "10 + 5 * 2",
         "100 - 50 - 25",
+        "15 / 3", //new test
+        "100 / 10", //another new test
+        "20 / 4", //once more
+        "(10 + 20) / 6", //last one 
         NULL
     };
     
-    int expected[] = {15, 15, 15, 30, 20, 25};
+    int expected[] = {15, 15, 15, 30, 20, 25, 5 , 10 , 5 , 5};
     
     for (int i = 0; tests[i] != NULL; i++) {
         printf("Test %d: %s\n", i + 1, tests[i]);
