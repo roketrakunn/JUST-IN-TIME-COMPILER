@@ -63,7 +63,8 @@ typedef struct {
 //----AST NODE TYPES
 typedef enum {
     NODE_NUMBER, //0..0
-    NODE_BINARY_OP //math arithmetics e.g +
+    NODE_BINARY_OP, //math arithmetics e.g +
+    NODE_UNARY_OP   // - +
 } NodeType;
 
 //----AST NODE
@@ -334,6 +335,7 @@ int parser_match(Parser* p, TokenType type) {
 ASTNode* parse_expression(Parser* p);
 ASTNode* parse_term(Parser* p);
 ASTNode* parse_factor(Parser* p);
+ASTNode* parse_unary(Parser* p);
 
 //Primary : Number or expression
 //if its a number create a new node of that number (when created it has null childs( left == right ==nul))
@@ -415,6 +417,10 @@ ASTNode* parse(char* source) {
     Parser parser;
     parser_init(&parser, &lexer);
     return parse_expression(&parser);
+}
+
+ASTNode* parse_unary(Parser* p) { 
+    //my code here , continue here
 }
 
 // Free AST
