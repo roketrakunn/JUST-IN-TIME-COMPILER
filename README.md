@@ -57,8 +57,8 @@ The compiler can parse and execute expressions like:
 ✅ Phase 1: Code generation and execution (COMPLETE)  
 ✅ Phase 2: Lexer and tokenizer (COMPLETE)  
 ✅ Phase 3: Full expression parser with precedence (COMPLETE)  
-✅ Phase 4: Division operator  + modulo oparator ( %) 
-✅ Phase 5: Unary operation awareness ("-5 + 3 = -2") 
+✅ Phase 4: Division operator  + modulo oparator (%) (COMPLETE) 
+✅ Phase 5: Unary operation awareness ("-5 + 3 = -2") (COMPLETE)
 ⏳ Phase 6: Variables and assignment  
 ⏳ Phase 7: Control flow (if/else, loops)
 
