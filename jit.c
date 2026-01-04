@@ -207,7 +207,20 @@ void emit_mov_eax_edx(CodeBuffer *buf){
     emit_byte(buf,0xD0);
 }
 
-//=========THE LEXER ===========
+//emit func => negattin - eax = -eax
+// 0xF7 0xD8 => neg %eax ( asmx86)
+// How it works: 
+//          before eax = -5 
+//          after eax = 5 
+//      + uses two complements =>> the num e.g 0x00000005 and not = 0xFFFFFFFFA then plus 1 
+//      = 0xFFFFFFFB = - 5
+
+void emit_neg_eax(CodeBuffer* buf){ 
+    emit_byte(buf,0xF7); 
+    emit_byte(buf,0xD8);
+}
+
+
 typedef struct {
     char* source; //Original string parsed "5 + 10" points to the beginning of this
     char* current; //where the current pointer is ... 
@@ -368,11 +381,11 @@ ASTNode* parse_primary(Parser* p) {
 
 // Factor handles * and / (higher precedence)
 ASTNode* parse_factor(Parser* p) {
-    ASTNode* left = parse_primary(p);
+    ASTNode* left = parse_unary(p);
 
     while (parser_match(p, TOKEN_STAR) || parser_match(p, TOKEN_SLASH) || parser_match(p, TOKEN_PERCENT)) { 
         Token op = p->previous;
-        ASTNode* right = parse_primary(p);
+        ASTNode* right = parse_unary(p);
 
         ASTNode* node = malloc(sizeof(ASTNode));;
 
@@ -420,7 +433,22 @@ ASTNode* parse(char* source) {
 }
 
 ASTNode* parse_unary(Parser* p) { 
-    //my code here , continue here
+    if (parser_match(p, TOKEN_MINUS) || parser_match(p, TOKEN_PLUS)) {
+        Token op = p->previous; 
+        ASTNode* right = parse_unary(p); 
+
+        ASTNode* node = malloc(sizeof(ASTNode));
+
+    
+        node->type = NODE_UNARY_OP;
+        node->op = (op.type == TOKEN_MINUS) ? '-' : '+';
+        node->left = NULL; 
+        node->right = right; 
+
+        return node;
+    }
+
+    return parse_primary(p);
 }
 
 // Free AST
@@ -430,6 +458,24 @@ void free_ast(ASTNode* node) {
     free_ast(node->right);
     free(node);
 }
+//dbg
+void print_ast(ASTNode* node, int depth) {
+    if (!node) {
+        printf("%*sNULL\n", depth * 2, "");
+        return;
+    }
+    
+    if (node->type == NODE_NUMBER) {
+        printf("%*sNUMBER: %d\n", depth * 2, "", node->value);
+    } else if (node->type == NODE_UNARY_OP) {
+        printf("%*sUNARY: %c\n", depth * 2, "", node->op);
+        print_ast(node->right, depth + 1);
+    } else {
+        printf("%*sBINARY: %c\n", depth * 2, "", node->op);
+        print_ast(node->left, depth + 1);
+        print_ast(node->right, depth + 1);
+    }
+}
 
 //=========CODE GENERATOR================
 void code_gen(ASTNode* node, CodeBuffer* buf) {
@@ -437,6 +483,22 @@ void code_gen(ASTNode* node, CodeBuffer* buf) {
         emit_mov_eax_imm(buf, node->value);
         return;
     }
+
+    if (node->type == NODE_UNARY_OP) {
+
+        code_gen(node->right,buf);
+        
+        switch (node->op) {
+            case '-': 
+                emit_neg_eax(buf); //negate EAX
+               break;
+            case '+': 
+                break; //it would be unary plus(+) that does not  have any effect
+        }
+        return;
+    }
+
+
 
     // Binary operation
     // Evaluate left subtree
@@ -525,6 +587,10 @@ int compile_and_run(char* source) {
         return -1;
     }
 
+    printf("AST for '%s':\n", source);
+    print_ast(ast, 0);
+    printf("\n");
+
     //GENERATE THE CODE.....
     CodeBuffer* buf = code_buffer_new(1024);
     code_gen(ast, buf);
@@ -555,14 +621,19 @@ int main() {
         "100 / 10",
         "20 / 4", 
         "(10 + 20) / 6", 
-        "15 % 4", //new 
-        "100 % 7", //new
-        "20 % 6", //new
-        "(100 + 5) % 4", //new
+        "15 % 4",
+        "100 % 7",
+        "20 % 6",
+        "(100 + 5) % 4", 
+        "-5", // should be -5
+        "-5 + 10", // should be 5 
+        "10 + -5",//shoudl be 5 again 
+        "-5 -3", // should be -8
+        "-5 * -3", // should be 15
         NULL
     };
     
-    int expected[] = {15, 15, 15, 30, 20, 25, 5 , 10 , 5 , 5, 3, 2, 2, 1};
+    int expected[] = {15, 15, 15, 30, 20, 25, 5 , 10 , 5 , 5, 3, 2, 2, 1, -5 , 5, 5, -8 , 15};
     
     for (int i = 0; tests[i] != NULL; i++) {
         printf("Test %d: %s\n", i + 1, tests[i]);
