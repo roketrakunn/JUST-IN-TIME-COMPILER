@@ -64,8 +64,8 @@ The compiler can parse and execute expressions like:
 
 ## Future Enhancements
 
-- [✅] Division and modulo operators
-- [✅] Unary operators (negation)
+- ✅ Division and modulo operators
+- ✅ Unary operators (negation)
 - [ ] Variable storage and retrieval
 - [ ] Function definitions
 - [ ] Comparison operators and conditionals
