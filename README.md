@@ -36,6 +36,7 @@ The compiler can parse and execute expressions like:
 100 - 50 - 25   → 25  (left-to-right evaluation)
 100 / 5 
 (100 + 5) % 10
+(-5 + 3 ) % 2   This is new 
 ```
 
 ## How It Works
@@ -59,7 +60,7 @@ The compiler can parse and execute expressions like:
 ✅ Phase 3: Full expression parser with precedence (COMPLETE)  
 ✅ Phase 4: Division operator  + modulo oparator (%) (COMPLETE) 
 ✅ Phase 5: Unary operation awareness ("-5 + 3 = -2") (COMPLETE)
-⏳ Phase 6: Variables and assignment  
+⏳ Phase 6: Variables and assignment  (currently working on this)
 ⏳ Phase 7: Control flow (if/else, loops)
 
 ## Future Enhancements
