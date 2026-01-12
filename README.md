@@ -1,6 +1,6 @@
 # JIT Compiler
 
-A simple Just-In-Time compiler that parses arithmetic expressions and generates x86 machine code for direct execution at runtime.
+A simple Just-In-Time(JIT) compiler that parses arithmetic expressions and generates x86 machine code for direct execution at runtime.
 
 ## Features
 
@@ -36,7 +36,7 @@ The compiler can parse and execute expressions like:
 100 - 50 - 25   → 25  (left-to-right evaluation)
 100 / 5 
 (100 + 5) % 10
-(-5 + 3 ) % 2   This is new 
+(-5 + 3 ) % 2  
 ```
 
 ## How It Works
