@@ -37,6 +37,7 @@ The compiler can parse and execute expressions like:
 100 / 5 
 (100 + 5) % 10
 (-5 + 3 ) % 2  
+-5 - +3  = -8
 ```
 
 ## How It Works
@@ -62,6 +63,7 @@ The compiler can parse and execute expressions like:
 ✅ Phase 5: Unary operation awareness ("-5 + 3 = -2") (COMPLETE)
 ⏳ Phase 6: Variables and assignment  (currently working on this)
 ⏳ Phase 7: Control flow (if/else, loops)
+⏳ Phase 8: Craft an interpreter and make this the new rurst lol.
 
 ## Future Enhancements
 
