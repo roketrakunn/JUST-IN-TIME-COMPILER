@@ -38,6 +38,14 @@ The compiler can parse and execute expressions like:
 (100 + 5) % 10
 (-5 + 3 ) % 2  
 -5 - +3  = -8
+THIS IS NEW ;)
+x = 5; x                   → 5
+x = 5; x * 2               → 10
+x = 5; y = 10; x + y       → 15
+a = 10; b = 20; a + b * 2  → 50
+x = -5; x + 10             → 5
+x = 10; y = 3; x % y       → 1
+
 ```
 
 ## How It Works
@@ -61,7 +69,7 @@ The compiler can parse and execute expressions like:
 ✅ Phase 3: Full expression parser with precedence (COMPLETE)  
 ✅ Phase 4: Division operator  + modulo oparator (%) (COMPLETE) 
 ✅ Phase 5: Unary operation awareness ("-5 + 3 = -2") (COMPLETE)
-⏳ Phase 6: Variables and assignment  (currently working on this)
+✅ Phase 6: Variables and assignment  (currently working on this)
 ⏳ Phase 7: Control flow (if/else, loops)
 ⏳ Phase 8: Craft an interpreter and make this the new rurst lol.
 
@@ -69,7 +77,7 @@ The compiler can parse and execute expressions like:
 
 - ✅ Division and modulo operators
 - ✅ Unary operators (negation)
-- [ ] Variable storage and retrieval
+- ✅ Variable storage and retrieval
 - [ ] Function definitions
 - [ ] Comparison operators and conditionals
 - [ ] Optimization passes
