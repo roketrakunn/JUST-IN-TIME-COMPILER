@@ -83,7 +83,7 @@ int symbol_table_add(SymbolTable* st, const char* name, int length) {
 }
 
 // Look up a variable by name
-// Returns stack offset, or 0 if not found
+// Returns stack offset, or 0 if it is not found
 int symbol_table_lookup(SymbolTable* st, const char* name, int length) {
     for (int i = 0; i < st->count; i++) {
         if (strncmp(st->vars[i].name, name, length) == 0 && 
