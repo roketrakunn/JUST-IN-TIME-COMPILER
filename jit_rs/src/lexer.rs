@@ -1,6 +1,6 @@
 //THIS IS THE LEXER 
 //What it does ? turns a string of characters into meaninfull list of words/tokens we will use
-// e.g "x = 5 + 10;"
+// e.g "x = 5 + 10"
 // you get [Ident("x")]  [Eq]  [Number(5)]  [Plus]  [Number(10)]  [Semicolon]  [Eof]
 
 use std::{char, intrinsics::{breakpoint, volatile_load}, ptr::slice_from_raw_parts, slice::SliceIndex, vec};
