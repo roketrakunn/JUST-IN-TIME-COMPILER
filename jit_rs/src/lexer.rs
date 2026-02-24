@@ -1,113 +1,105 @@
-//THIS IS THE LEXER 
-//What it does ? turns a string of characters into meaninfull list of words/tokens we will use
-// e.g "x = 5 + 10"
-// you get [Ident("x")]  [Eq]  [Number(5)]  [Plus]  [Number(10)]  [Semicolon]  [Eof]
+// ============================================================
+// LEXER — Breaks raw source text into a stream of Tokens
+// ============================================================
 
-use std::{char, intrinsics::{breakpoint, volatile_load}, ptr::slice_from_raw_parts, slice::SliceIndex, vec};
+// -------------------------------------------------------
+// TOKEN TYPES — every kind of "word" our language has
+// -------------------------------------------------------
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    // Literals
+    Number(i64),        // 42, -7, 1000
 
-#[derive(Debug , Clone , PartialEq)]
+    // Identifiers & Keywords
+    Ident(String),      // variable names: x, foo, my_var
+    If,                 // if
+    Else,               // else
+    While,              // while
+    Fn,                 // fn
+    Return,             // return
 
-pub enum TokenKind { 
-    Number(i64),
-    Ident(String), 
+    // Operators
+    Plus,               // +
+    Minus,              // -
+    Star,               // *
+    Slash,              // /
+    Percent,            // %
 
-    //Identifiers and key words
-    If,
-    Else , 
-    While,
-    Return,
-    
-    //Operators
-    Plus,  //addition
-    Minus, //subtration
-    Star, //multiplication
-    Slash, //int dv
-    Percent, //mod div
+    // Comparison (needed for if/while conditions)
+    EqEq,               // ==
+    BangEq,             // !=
+    Lt,                 // <
+    Gt,                 // >
+    LtEq,               // <=
+    GtEq,               // >=
 
+    // Assignment
+    Eq,                 // =
 
-    //comparisons for stuff like ifs and whiles
+    // Delimiters
+    LParen,             // (
+    RParen,             // )
+    LBrace,             // {
+    RBrace,             // }
+    Semicolon,          // ;
+    Comma,              // ,
 
-    EqEq , // == if ( x== y) typa thing
-    BangEq, // != ( same thing) 
-    Lt,         //les than
-    Gt,         //greater than
-    LtEq,        // less than or equals to 
-    GtEq,       //greater than or equal to.
-
-
-    Eq ,        //assingment
-
-    LParen,      // "(" 
-    RParen,      // ")"
-    LBrace,     // "{" 
-    RBrace,     //"}"
-    SemiColon,  // ";"
-    Comma,      // ","
-
-    //end of input/line 
-    Eof
+    // End of input
+    Eof,
 }
 
-/**
- * Token to pair a kind with where it actual came from in the source.
- * col and line used for error messages later.
- * */
-
-#[derive(Debug , Clone)]
-pub  struct Token { 
-    pub kind : TokenKind,
-    pub line : usize, 
-    pub col : usize,
+// A Token pairs a kind with WHERE in the source it came from.
+// The position (line, col) for error messages:
+//   "Error at line 3, col 7: undefined variable 'x'"
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+    pub col: usize,
 }
 
-//============= THE LEXER =============#
-
-/**
- *It holds: 
-    + The source text as vector of chars.
-    + Easier to navigate/index than bytes
-    + pos : Current position in that vec
-    + line , col : for error reporting (fancy stuff)
-*/
-
-pub  struct Lexer {
-    source : Vec<char>, 
-    pos : usize , 
-    line : usize , 
-    col : usize,
+// -------------------------------------------------------
+// THE LEXER 
+// -------------------------------------------------------
+// It holds:
+//   - the source text as a Vec of chars (easier to index than bytes)
+//   - pos  : current position in that vec
+//   - line, col : for error reporting
+pub struct Lexer {
+    source: Vec<char>,
+    pos: usize,
+    line: usize,
+    col: usize,
 }
-
-// A Constuctor that takes &str and converts it to our source vector.
 
 impl Lexer {
-    //returns a new lexer
-    pub fn new(source : &str) -> Self{
-        Lexer { source: source.chars().collect(),
-        pos: 0,
-        line: 1, 
-        col: 1,
+    // Constructor — takes a &str, converts to Vec<char>
+    pub fn new(source: &str) -> Self {
+        Lexer {
+            source: source.chars().collect(),
+            pos: 0,
+            line: 1,
+            col: 1,
         }
     }
 
-    // Peak at the current char without consumig it.
-    fn peak(&self) -> Option<char> { 
-        self.source.get(self.pos).copied() // "get the char from source and derefernce it" just
-                                           // looking
+    // Peek at the current char WITHOUT consuming it
+    // ANALOGY: Looking ahead in a book without turning the page
+    fn peek(&self) -> Option<char> {
+        self.source.get(self.pos).copied()
     }
 
-    //peak two chars ahead , needed to tell == from =
-
-    fn peak2(&self) -> Option<char> { 
-         self.source.get(self.pos + 1).copied() 
+    // Peek TWO chars ahead (needed to tell == from =)
+    fn peek2(&self) -> Option<char> {
+        self.source.get(self.pos + 1).copied()
     }
 
-    //consume char and advance postion 
-    
-    fn advance(&mut self) -> Option<char> { 
-        let ch = self.source.get(self.pos).copied(); 
-        if let Some(ch) = ch { 
-            self.pos + 1 ;
-            if ch == '\n' { 
+    // Consume the current char and advance position
+    fn advance(&mut self) -> Option<char> {
+        let ch = self.source.get(self.pos).copied();
+        if let Some(c) = ch {
+            self.pos += 1;
+            if c == '\n' {
                 self.line += 1;
                 self.col = 1;
             } else {
@@ -116,43 +108,33 @@ impl Lexer {
         }
         ch
     }
-    //skips white spaces/tabs/newlines 
 
-    fn skip_whitespace(&mut self) { 
-        while matches!(self.peak() , Some(' ') | Some('\t') | Some('\n') | Some('\r') ) {
+    // Skip spaces, tabs, newlines
+    fn skip_whitespace(&mut self) {
+        while matches!(self.peek(), Some(' ') | Some('\t') | Some('\n') | Some('\r')) {
             self.advance();
         }
     }
 
-    /**
-     * Peak at next char , retuned is Some(char)
-     * If None is  returned then loop ends/breaks
-     * IF the char existed and was a value
-     * we coveert it to its value from asci and build our value
-     * return value at the end
-     */
-
-    fn read_number(&mut self) -> i64 { 
-        let mut value :i64 = 0 ; 
-
-        while let Some(c) = self.peak() {
-            
+    // Read a full integer number like 1234
+    fn read_number(&mut self) -> i64 {
+        let mut value: i64 = 0;
+        while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
-                value = value * 10 + ( c as i64  - '0' as i64);
+                value = value * 10 + (c as i64 - '0' as i64);
                 self.advance();
             } else {
                 break;
             }
         }
-        value 
-    } 
+        value
+    }
 
-    //Read an identifier or keyword like while x , myVar  , if
-
-    fn read_ident(&mut self) -> String { 
+    // Read an identifier or keyword like "while", "x", "myVar"
+    fn read_ident(&mut self) -> String {
         let mut s = String::new();
-        while let Some(c) = self.peak() {
-            if c.is_alphanumeric() || c == '_' { 
+        while let Some(c) = self.peek() {
+            if c.is_alphanumeric() || c == '_' {
                 s.push(c);
                 self.advance();
             } else {
@@ -162,49 +144,41 @@ impl Lexer {
         s
     }
 
-    /**
-     * This is the main function , returns the next token from he source
-     * Repeatdly called by the parser
-     *
-     */
-
-    fn next_token(&mut self) -> Token { 
+    // The main method — returns the next Token from the source
+    // This is called repeatedly by the parser.
+    pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
 
         let line = self.line;
         let col = self.col;
 
-        let make = | kind : TokenKind , line : usize , col : usize |  Token { kind, line, col }; 
+        // Helper closure to build a token at the current position
+        let make = |kind: TokenKind, line: usize, col: usize| Token { kind, line, col };
 
-        match self.peak() {
+        match self.peek() {
             None => make(TokenKind::Eof, line, col),
 
-            Some(c) if c.is_ascii_digit() => { 
+            Some(c) if c.is_ascii_digit() => {
                 let n = self.read_number();
-                make(TokenKind::Number(n), line , col)
+                make(TokenKind::Number(n), line, col)
             }
 
-            Some(c) if c.is_alphabetic() || c == '_' => { 
+            Some(c) if c.is_alphabetic() || c == '_' => {
                 let ident = self.read_ident();
-
-                //check if its a keyword
-
+                // Check if it's a keyword
                 let kind = match ident.as_str() {
-                    "if"    => TokenKind::If,
-                    "else"  => TokenKind::Else,
-                    "while" => TokenKind::While,
-                    "fn"    => TokenKind::Fn, 
+                    "if"     => TokenKind::If,
+                    "else"   => TokenKind::Else,
+                    "while"  => TokenKind::While,
+                    "fn"     => TokenKind::Fn,
                     "return" => TokenKind::Return,
-                    _       => TokenKind::Indent(ident)
-                    
+                    _        => TokenKind::Ident(ident),
                 };
-                make(kind,line,col)
+                make(kind, line, col)
             }
 
-            Some(_) => { 
-                //single double char token
-                
-
+            Some(_) => {
+                // Single (or double) character tokens
                 let c = self.advance().unwrap();
                 let kind = match c {
                     '+' => TokenKind::Plus,
@@ -216,56 +190,44 @@ impl Lexer {
                     ')' => TokenKind::RParen,
                     '{' => TokenKind::LBrace,
                     '}' => TokenKind::RBrace,
-                    ';' => TokenKind::SemiColon,
+                    ';' => TokenKind::Semicolon,
                     ',' => TokenKind::Comma,
 
-                    // two char ops like ,<= or == or anything you are thinkng of
-
-                    '=' => { 
-                       if self.peak() == Some('=') { self.advance(); TokenKind::EqEq }
-                        else { TokenKind::Eq } 
+                    // Two-char operators: == != <= >=
+                    '=' => {
+                        if self.peek() == Some('=') { self.advance(); TokenKind::EqEq }
+                        else { TokenKind::Eq }
                     }
-
-                    '!' => { 
-                        if self.peak()  == Some('='){
-                            self.advance();
-                            TokenKind::BangEq
-                        }else {
-                            panic!("Unexpected '!' at line {line} col {col}")
-                        }
+                    '!' => {
+                        if self.peek() == Some('=') { self.advance(); TokenKind::BangEq }
+                        else { panic!("Unexpected '!' at line {line} col {col}") }
                     }
-
                     '<' => {
-                        if self.peak()== Some('=') { self.advance(); TokenKind::LtEq }
+                        if self.peek() == Some('=') { self.advance(); TokenKind::LtEq }
                         else { TokenKind::Lt }
                     }
                     '>' => {
-                        if self.peak() == Some('=') { self.advance(); TokenKind::GtEq }
+                        if self.peek() == Some('=') { self.advance(); TokenKind::GtEq }
                         else { TokenKind::Gt }
                     }
-                    
+
                     other => panic!("Unknown character '{}' at line {line} col {col}", other),
                 };
-                make(kind,line,col)
+                make(kind, line, col)
             }
         }
     }
 
-    // Convinience : tokenise the whole source into Vec<Token>
-    // The parser can use this instead of calling next_token()
-
-    pub fn tokenise(mut self) -> Vec<Token> { 
+    // Convenience: tokenise the ENTIRE source into a Vec<Token>
+    // The parser will use this Vec instead of calling next_token() directly.
+    pub fn tokenise(mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         loop {
             let tok = self.next_token();
             let is_eof = tok.kind == TokenKind::Eof;
             tokens.push(tok);
-            if is_eof {break;}
+            if is_eof { break; }
         }
         tokens
     }
 }
-
-
-
-
