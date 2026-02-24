@@ -1,272 +1,230 @@
-use std::intrinsics::simd::simd_le;
+// ============================================================
+// LEXER — Breaks raw source text into a stream of Tokens
+// ============================================================
+/// -------------------------------------------------------
+// TOKEN TYPES — every kind of "word" our language has
+// -------------------------------------------------------
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    // Literals
+    Number(i64),        // 42, -7, 1000
 
-/** @parser
- * Parser
- *
- * The parser transforms a list of tokens into an Abstract Syntax Tree (AST).
- *
- * The AST is important because it encodes operator precedence.
- * For example:
- *
- *     2 + 3 * 4        is NOT the same as        (2 + 3) * 4
- *
- *     2 + 3 * 4
- *
- *         ADD
- *        /   \
- *       2    MUL
- *           /   \
- *          3     4
- *
- *
- *     (2 + 3) * 4
- *
- *         MUL
- *        /   \
- *      ADD     4
- *     /   \
- *    2     3
- *
- *
- * Example:
- *     x = 5 + 3 * 2
- *
- * Becomes:
- *
- *         ASSIGN(x)
- *             |
- *            ADD
- *           /   \
- *          5    MUL
- *              /   \
- *             3     2
- *
- * Notice:
- * Multiplication appears deeper in the tree,
- * which reflects its higher precedence.
- *
- * The tree is built bottom-up according to precedence rules.
- */
+    // Identifiers & Keywords
+    Ident(String),      // variable names: x, foo, my_var
+    If,                 // if
+    Else,               // else
+    While,              // while
+    Fn,                 // fn
+    Return,             // return
 
-use crate::lexer::{Token, TokenKind};
+    // Operators
+    Plus,               // +
+    Minus,              // -
+    Star,               // *
+    Slash,              // /
+    Percent,            // %
 
-/**
- * AST NODE - one node in he syntax tree 
- * I used Box<Expr> for child node beacause a rercusive struct needs
- * heap allocation(so the compiler must know the size)
- *
- * Box<Expr>  = "One item per heap" , its a pointer , pointers have known size
- */
+    // Comparison (needed for if/while conditions)
+    EqEq,               // ==
+    BangEq,             // !=
+    Lt,                 // <
+    Gt,                 // >
+    LtEq,               // <=
+    GtEq,               // >=
 
-#[derive(Debug ,Clone)]
-pub enum Expr {
-    // leaf Node
-    Number(i64),
-    Var(String),        // reading a varible .. likee uhh .. x = expr 
+    // Assignment
+    Eq,                 // =
 
-    Assign { 
-        name : String,
-        value: Box<Expr>,
-    },
+    // Delimiters
+    LParen,             // (
+    RParen,             // )
+    LBrace,             // {
+    RBrace,             // }
+    Semicolon,          // ;
+    Comma,              // ,
 
-    // Binary operation : left op right
-    BinOp { 
-        op : BinOpKind,
-        left : Box<Expr>,
-        right: Box<Expr>,
-    },
-
-    // Unary operation , e.g -x 
-    
-    UnaryOp { 
-        op : UnaryOpKind,
-        expr : Box<Expr>,
-    },
-
-    //if (cond) { then} else {else_then}
-
-    If { 
-        cond : Box<Expr>,
-        then_block: Vec<Stmt>,
-        else_block: Option<Vec<Stmt>>,
-    },
-
-
-    // while (cond) {body}
-
-    While { 
-        cond : Box<Expr>,
-        body : Vec<Stmt>,
-    },
-
-    //Function call : fn name(params) {body} -declaration returns Uint
-
-    FnCall { 
-        name :String,
-        args :Vec<Expr>,
-    },
+    // End of input
+    Eof,
 }
 
-
+// A Token pairs a kind with WHERE in the source it came from.
+// The position (line, col) for error messages:
+//   "Error at line 3, col 7: undefined variable 'x'"
 #[derive(Debug, Clone)]
-
-pub enum BinOpKind {
-    Add, Sub, Mul, Div ,Mod,
-    EqEq , NotEq , Lt , Gt , LtEq , GtEq,
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+    pub col: usize,
 }
 
-#[derive(Debug, Clone)]
-
-pub enum UnaryOpKind {
-    Neg , // -x 
-    Pos , //mmm
+// -------------------------------------------------------
+// THE LEXER 
+// -------------------------------------------------------
+// It holds:
+//   - the source text as a Vec of chars (easier to index than bytes)
+//   - pos  : current position in that vec
+//   - line, col : for error reporting
+pub struct Lexer {
+    source: Vec<char>,
+    pos: usize,
+    line: usize,
+    col: usize,
 }
 
-
-/**
- * STATEMENTS - Things that DO something (vs things/expressions that produce/return values)
- * Statement : x = 6 + 8 (stores 14 to x)
- * Expression : 5 + 8 (produces 13)
- *
- * Every Statement ends with ';'
- */
-
-
-#[derive(Debug, Clone)]
-
-pub enum Stmt {
-
-    Expr(Expr),             //expression used as statement , e.g foo();
-    Return(Expr),           //return <expr>
-                            
-    FnDef {                 //fn name(param) {body}
-        name: String,
-        params: Vec<String>,
-        body : Vec<Stmt>,
-    },           
-}
-
-// full program = list of statemens 
-pub type Program = Vec<Stmt>;
-
-/**
- * ----THE PASER----
- * Contains the tokens list and the curso postion
- * Its like reading a book while holding a marker
- * peek() raed curr page
- * advance() turn to the next page
- * */
-
-pub struct Parser { 
-    tokens : Vec<Token>,
-    pos : usize,
-} 
-
-impl Parser {
-
-    // Create a new parser 
-    pub fn new(tokens : Vec<Token>) -> Self {
-        Parser { tokens, pos: 0 }
+impl Lexer {
+    // Constructor — takes a &str, converts to Vec<char>
+    pub fn new(source: &str) -> Self {
+        Lexer {
+            source: source.chars().collect(),
+            pos: 0,
+            line: 1,
+            col: 1,
+        }
     }
 
-    //look at the curr token without consuming it 
-
-    fn peek(&self) -> &TokenKind { 
-        &self.tokens[self.pos].kind
+    // Peek at the current char WITHOUT consuming it
+    // ANALOGY: Looking ahead in a book without turning the page
+    fn peek(&self) -> Option<char> {
+        self.source.get(self.pos).copied()
     }
 
-    // Loook at the current tokens col/line for errors
-   
-    fn peek_token(&self) -> &Token {
-        &self.tokens[self.pos]
+    // Peek TWO chars ahead (needed to tell == from =)
+    fn peek2(&self) -> Option<char> {
+        self.source.get(self.pos + 1).copied()
     }
 
-    //consume the curr token, return it and advance to the next token.
-
-    fn advance(&mut self) -> &Token { 
-        let tok = &self.tokens[self.pos];
-        if self.pos < self.tokens.len() { 
+    // Consume the current char and advance position
+    fn advance(&mut self) -> Option<char> {
+        let ch = self.source.get(self.pos).copied();
+        if let Some(c) = ch {
             self.pos += 1;
+            if c == '\n' {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
         }
-        tok
-    } 
+        ch
+    }
 
-    // Consume the token if it macthes the expected kind , 
-    // Return true if it does , else false
-
-    fn matches(&mut self , kind :&TokenKind) -> bool { 
-        if self.peek() == kind { 
+    // Skip spaces, tabs, newlines — same as C's lexer_skip_whitespace
+    fn skip_whitespace(&mut self) {
+        while matches!(self.peek(), Some(' ') | Some('\t') | Some('\n') | Some('\r')) {
             self.advance();
-            return true;
         }
-        false
     }
 
-    // This is like matches but panics if the token does nto exist
-    // Used when grammer requires a specific token
-
-
-    // Like matches() but PANICS if token doesn't match
-    // Used when the grammar REQUIRES a specific token
-    fn expect(&mut self, kind: &TokenKind) {
-        if self.peek() != kind {
-            let tok = self.peek_token();
-            panic!(
-                "Expected {:?} but got {:?} at line {} col {}",
-                kind, self.peek(), tok.line, tok.col
-            );
+    // Read a full integer number like 1234
+    fn read_number(&mut self) -> i64 {
+        let mut value: i64 = 0;
+        while let Some(c) = self.peek() {
+            if c.is_ascii_digit() {
+                value = value * 10 + (c as i64 - '0' as i64);
+                self.advance();
+            } else {
+                break;
+            }
         }
-        self.advance();
+        value
     }
 
-    /**
-     * ----GRAMMER RULES-----
-     * Precedence ladder ( lowest -> highest):
-     *  parse_program 
-     *      parse_stmt
-     *          parser_expr         -> assignt variable
-     *              parser_comparison   -> == , != , , <= , >=
-     *                  parse_term  -> + , -
-     *                      parse_factor    -> * / % 
-     *                          parse_unary -> - + 
-     *                              parse_primary -> number indent ,(expr)
-     *
-     * */
-    
-    pub fn parse_program(&mut self) -> Program {
-        
-        let mut stmts = Vec::new();
-        
-        while self.peek() != &TokenKind::Eof {
-            stmts.push(self.parse_stmt());
+    // Read an identifier or keyword like "while", "x", "myVar"
+    fn read_ident(&mut self) -> String {
+        let mut s = String::new();
+        while let Some(c) = self.peek() {
+            if c.is_alphanumeric() || c == '_' {
+                s.push(c);
+                self.advance();
+            } else {
+                break;
+            }
         }
-        stmts
+        s
     }
 
-    pub fn parse_stmt(&mut self ) -> Stmt {
-        //fn definition 
-        
-        if self.matches(&TokenKind::Fn) { 
-            return return self.parse_fn_def();
+    // The main method — returns the next Token from the source
+    // This is called repeatedly by the parser.
+    pub fn next_token(&mut self) -> Token {
+        self.skip_whitespace();
+
+        let line = self.line;
+        let col = self.col;
+
+        // Helper closure to build a token at the current position
+        let make = |kind: TokenKind, line: usize, col: usize| Token { kind, line, col };
+
+        match self.peek() {
+            None => make(TokenKind::Eof, line, col),
+
+            Some(c) if c.is_ascii_digit() => {
+                let n = self.read_number();
+                make(TokenKind::Number(n), line, col)
+            }
+
+            Some(c) if c.is_alphabetic() || c == '_' => {
+                let ident = self.read_ident();
+                // Check if it's a keyword
+                let kind = match ident.as_str() {
+                    "if"     => TokenKind::If,
+                    "else"   => TokenKind::Else,
+                    "while"  => TokenKind::While,
+                    "fn"     => TokenKind::Fn,
+                    "return" => TokenKind::Return,
+                    _        => TokenKind::Ident(ident),
+                };
+                make(kind, line, col)
+            }
+
+            Some(_) => {
+                // Single (or double) character tokens
+                let c = self.advance().unwrap();
+                let kind = match c {
+                    '+' => TokenKind::Plus,
+                    '-' => TokenKind::Minus,
+                    '*' => TokenKind::Star,
+                    '/' => TokenKind::Slash,
+                    '%' => TokenKind::Percent,
+                    '(' => TokenKind::LParen,
+                    ')' => TokenKind::RParen,
+                    '{' => TokenKind::LBrace,
+                    '}' => TokenKind::RBrace,
+                    ';' => TokenKind::Semicolon,
+                    ',' => TokenKind::Comma,
+
+                    // Two-char operators: == != <= >=
+                    '=' => {
+                        if self.peek() == Some('=') { self.advance(); TokenKind::EqEq }
+                        else { TokenKind::Eq }
+                    }
+                    '!' => {
+                        if self.peek() == Some('=') { self.advance(); TokenKind::BangEq }
+                        else { panic!("Unexpected '!' at line {line} col {col}") }
+                    }
+                    '<' => {
+                        if self.peek() == Some('=') { self.advance(); TokenKind::LtEq }
+                        else { TokenKind::Lt }
+                    }
+                    '>' => {
+                        if self.peek() == Some('=') { self.advance(); TokenKind::GtEq }
+                        else { TokenKind::Gt }
+                    }
+
+                    other => panic!("Unknown character '{}' at line {line} col {col}", other),
+                };
+                make(kind, line, col)
+            }
         }
-        
-        //return statements 
-
-        if self.matches(&TokenKind::Return) { 
-            let expr = self.parse_expr;
-            self.expect(&TokenKind::SemiColon);
-            return Stmt::Return(expr);
-        }
-
-        // expression statement ( assignment , call , etc)
-
-        let expr = self.parse_expr();
-        self.expect(&TokenKind::SemiColon);
-        Stmt::Expr(expr)
     }
 
-    // ----TO BE CONTINUED----
-    // -- I AM SICK :( 
-
+   pub fn tokenise(mut self) -> Vec<Token> {
+        let mut tokens = Vec::new();
+        loop {
+            let tok = self.next_token();
+            let is_eof = tok.kind == TokenKind::Eof;
+            tokens.push(tok);
+            if is_eof { break; }
+        }
+        tokens
+    }
 }
-

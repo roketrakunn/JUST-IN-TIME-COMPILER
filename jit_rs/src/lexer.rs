@@ -9,7 +9,7 @@ use std::{char, intrinsics::{breakpoint, volatile_load}, ptr::slice_from_raw_par
 
 pub enum TokenKind { 
     Number(i64),
-    Indent(String), 
+    Ident(String), 
 
     //Identifiers and key words
     If,
@@ -27,7 +27,7 @@ pub enum TokenKind {
 
     //comparisons for stuff like ifs and whiles
 
-    EqEw , // == if ( x== y) typa thing
+    EqEq , // == if ( x== y) typa thing
     BangEq, // != ( same thing) 
     Lt,         //les than
     Gt,         //greater than
