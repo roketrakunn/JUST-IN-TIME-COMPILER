@@ -1,16 +1,26 @@
-// ============================================================
-// LEXER — Breaks raw source text into a stream of Tokens
-// ============================================================
+/**
+ * Break source into tokens 
+ * Tokens being every kind of "word" in our language
+ * for example if source is like " x= 9 + 3"
+ * It will break this into a vector of tokens being x and = and the numbers as well
+ * These tokens are important because they build the AST in the parser
+ * They are properly read and computed down top to return the results 
+ * 
+ * Like the above woudl return nothng but store  12 in x 
+ * 
+ * */
 
-// -------------------------------------------------------
-// TOKEN TYPES — every kind of "word" our language has
-// -------------------------------------------------------
+
+/**
+ * Literal numbers ... your 1 2  -3 and so on not yet doubles or floats
+ * Ident : Your variable names 
+ * If and Else is what youre thiking as well .. i mean youre a programmer dude.*/
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Literals
+
     Number(i64),        // 42, -7, 1000
 
-    // Identifiers & Keywords
     Ident(String),      // variable names: x, foo, my_var
     If,                 // if
     Else,               // else
@@ -44,13 +54,15 @@ pub enum TokenKind {
     Semicolon,          // ;
     Comma,              // ,
 
-    // End of input
+    // End of input/line 
     Eof,
 }
 
-// A Token pairs a kind with WHERE in the source it came from.
-// The position (line, col) for error messages:
-//   "Error at line 3, col 7: undefined variable 'x'"
+/** A Token pairs a kind with WHERE in the source it came from.
+ *  The position (line, col) for error messages:
+ *  "Error at line 3, col 7: undefined variable 'x'"
+*/
+
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
@@ -58,13 +70,15 @@ pub struct Token {
     pub col: usize,
 }
 
-// -------------------------------------------------------
-// THE LEXER 
-// -------------------------------------------------------
-// It holds:
-//   - the source text as a Vec of chars (easier to index than bytes)
-//   - pos  : current position in that vec
-//   - line, col : for error reporting
+/** -------------------------------------------------------
+ * THE LEXER 
+ * -------------------------------------------------------
+ * It holds:
+ *  - the source text as a Vec of chars (easier to index than bytes)
+ *  - pos  : current position in that vec
+ *  - line, col : for error reporting
+ */
+
 pub struct Lexer {
     source: Vec<char>,
     pos: usize,
@@ -73,7 +87,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    // Constructor — takes a &str, converts to Vec<char>
+    /** Constructor — takes a &str, converts to Vec<char> */
     pub fn new(source: &str) -> Self {
         Lexer {
             source: source.chars().collect(),
@@ -83,18 +97,18 @@ impl Lexer {
         }
     }
 
-    // Peek at the current char WITHOUT consuming it
+    /** Peek at the current char WITHOUT consuming it */
     // ANALOGY: Looking ahead in a book without turning the page
     fn peek(&self) -> Option<char> {
         self.source.get(self.pos).copied()
     }
 
-    // Peek TWO chars ahead (needed to tell == from =)
+    /** Peek TWO chars ahead (needed to tell == from =) */
     fn peek2(&self) -> Option<char> {
         self.source.get(self.pos + 1).copied()
     }
 
-    // Consume the current char and advance position
+    /** Consume the current char and advance position*/
     fn advance(&mut self) -> Option<char> {
         let ch = self.source.get(self.pos).copied();
         if let Some(c) = ch {
@@ -109,14 +123,14 @@ impl Lexer {
         ch
     }
 
-    // Skip spaces, tabs, newlines
+    /** Skip spaces, tabs, newlines */
     fn skip_whitespace(&mut self) {
         while matches!(self.peek(), Some(' ') | Some('\t') | Some('\n') | Some('\r')) {
             self.advance();
         }
     }
 
-    // Read a full integer number like 1234
+    /** Read a full integer number like 1234 */
     fn read_number(&mut self) -> i64 {
         let mut value: i64 = 0;
         while let Some(c) = self.peek() {
@@ -130,7 +144,7 @@ impl Lexer {
         value
     }
 
-    // Read an identifier or keyword like "while", "x", "myVar"
+    /** Read an identifier or keyword like "while", "x", "myVar" */
     fn read_ident(&mut self) -> String {
         let mut s = String::new();
         while let Some(c) = self.peek() {
@@ -144,8 +158,9 @@ impl Lexer {
         s
     }
 
-    // The main method — returns the next Token from the source
-    // This is called repeatedly by the parser.
+    /** The main method — returns the next Token from the source
+     *  This is called repeatedly by the parser.
+    */
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
 
@@ -218,8 +233,9 @@ impl Lexer {
         }
     }
 
-    // Convenience: tokenise the ENTIRE source into a Vec<Token>
-    // The parser will use this Vec instead of calling next_token() directly.
+    /** Convenience: tokenise the ENTIRE source into a Vec<Token>
+     *  The parser will use this Vec instead of calling next_token() directly.
+    */
     pub fn tokenise(mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         loop {
