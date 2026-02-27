@@ -16,7 +16,7 @@
 
 use crate::lexer::{Token, TokenKind};
 
-// -------------------------------------------------------
+// ------------------------------------------------------
 // AST NODE — one node in our syntax tree
 // -------------------------------------------------------
 // use Box<Expr> for child nodes because a recursive
@@ -199,7 +199,7 @@ impl Parser {
     }
 
     fn parse_fn_def(&mut self) -> Stmt {
-        // fn <name> ( <params> ) { <body> }
+        // fn <name> ( <params...> ) { <body...> }
         let name = match self.advance().kind.clone() {
             TokenKind::Ident(n) => n,
             other => panic!("Expected function name, got {:?}", other),
