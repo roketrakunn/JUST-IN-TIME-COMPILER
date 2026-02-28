@@ -91,17 +91,19 @@ impl Env {
         Env { scopes: vec![HashMap::new()] }
     }
 
-    /**Push a new scope */
+    /**Push a new scope , like entering a new if or while block*/
     pub fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
 
+    /**
+     * Pop the scope ,liek breaking out of while loop if if stmt
+     * */
     pub fn pop_scope(&mut self) {
         self.scopes.pop();
     }
 
     //store a variable in teh current inner most scope
-
     pub fn set(&mut self , name:&str , value :Value) {
 
         //walk from the inner most to outer , update if found
@@ -121,13 +123,70 @@ impl Env {
     pub fn get(&mut self , name:&str) ->Option<&Value> {
         for scope in self.scopes .iter().rev() {
             if let Some(val) = scope.get(name) { 
-                return Some(val);
+               return Some(val);
             }
         }
         None
     }
 }
 
+
+//well not its time to store functions 
+
+/**
+ * --------FUNCTIN DEFINITION STORE--------
+ * These are stored seperately from variables
+ * so when you call a function , e.g Add() this is where
+ * the interpreter will look.
+ * */
+
+#[derive(Debug,Clone)]
+pub struct FnDef{
+    pub params : Vec<String>,
+    pub body :Vec<Stmt>,
+}
+
+//---SIGNAL---- 
+//When a function hits return x ; deep in the cal stack
+//we need to to recursively unwind or way back immmediately 
+//we propagate thru the call stack.
+
+#[derive(Debug)]
+enum Signal{
+    Return(Value),
+}
+//==========THE INTERPETER===========
+
+pub struct Interpreter { 
+    pub  env :Env,
+    functions : HashMap<String, FnDef>,
+}
+
+impl Interpreter {
+    
+    pub fn new() -> Self {
+        Interpreter {
+            env: Env::new(), 
+            functions: HashMap::new(),
+        }
+    }
+
+    // run a full program ... just a list of statements 
+    // Returns the value  of the last evaluated expression.
+
+    pub  fn run(&mut self , progam : &Program) -> Value {
+        self.exec_stmts(program).unwrap_or(Value::Uint)
+    }
+
+    fn exec_stmts(&mut self ,stmts : &[Stmt])-> Result<Value , Signal> {
+        let mut last = Value::Uint;
+        for stmt in stmts { 
+            last = self.exec_stmt(stmt)?;
+        }
+        Ok(last)
+    }
+
+}
 
 
     
