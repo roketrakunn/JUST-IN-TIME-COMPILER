@@ -174,7 +174,7 @@ impl Interpreter {
     // run a full program ... just a list of statements 
     // Returns the value  of the last evaluated expression.
 
-    pub  fn run(&mut self , progam : &Program) -> Value {
+    pub  fn run(&mut self , program : &Program) -> Value {
         self.exec_stmts(program).unwrap_or(Value::Uint)
     }
 
@@ -186,6 +186,100 @@ impl Interpreter {
         Ok(last)
     }
 
+
+    fn exec_stmt(&mut self, stmt :&Stmt) ->Result<Value , Signal> {
+        match stmt {
+            //On expression statement , evaluate it and return its value.
+            Stmt::Expr(expr) => { 
+                Ok(self.eval_expr(expr)?)
+            }
+
+            //return expr => pack the value into a signal to unwind the stk
+            
+            Stmt::Return(expr) => { 
+                let val  = self.eval_expr(expr)?;
+                Err(Signal::Return(val))
+            }
+
+            //fn name(params) just register it , do not run it yet.
+
+            Stmt::FnDef { name, params, body } => {
+                self.functions.insert(name.clone(), FnDef {
+                    params: params.clone() ,
+                    body: body.clone()
+                });
+                
+                Ok(Value::Uint)
+            }
+        }
+    }
+
+    fn eval_expr(&mut self, expr : &Expr) -> Result<Value,Signal> {
+        
+        match expr {
+            
+            // A literal number 
+            Expr::Number(n) => Ok(Value::Int(*n)),
+
+            // a variable read , loook it up in the environment
+
+            Expr::Var(name) => { 
+                match self.env.get(name) {
+                    Some(val) => Ok(val.clone()),
+                    None => panic!("Undefined varibale {}",name),
+                }
+            }
+
+            //Assignmet : eval right side and store on environment
+
+            Expr::Assign { name, value } => { 
+                let val = self.eval_expr(value)?;
+                self.env.set(name, val.clone());
+                Ok(val)
+            }
+
+
+            // Binary operations
+        
+            Expr::BinOp { op, left, right } => { 
+                let l = self.eval_expr(left)?.as_int();
+                let r = self.eval_expr(right)?.as_int();
+
+                let results = match op {
+                    
+                    BinOpKind::Add => l + r,
+                    BinOpKind::Sub => l - r,
+                    BinOpKind::Mul => l * r,
+                    BinOpKind::Div=>  { 
+                        if r == 0 { panic!("Error division by zero!");}
+                        l/r
+                    },
+                    BinOpKind::Mod => {
+                        if r == 0 {panic!("Error mudulo by zero");}
+                        r % l
+                    }
+
+                    BinOpKind::EqEq  => (l == r) as i64,
+                    BinOpKind::NotEq => (l != r) as i64,
+                    BinOpKind::Lt    => (l <  r) as i64,
+                    BinOpKind::Gt    => (l >  r) as i64,
+                    BinOpKind::LtEq  => (l <= r) as i64,
+                    BinOpKind::GtEq  => (l >= r) as i64,
+
+                };
+                Ok(Value::Int(results))
+            }
+            Expr::UnaryOp { op, expr } => {
+                let val = self.eval_expr(expr)?.as_int();
+                let resulst = match op {
+                    
+                    UnaryOpKind::Neg => -val,
+                    UnaryOpKind::Pos => val,
+                };
+                Ok(Value::Int(resulst))
+            }
+        }
+    }
 }
 
 
