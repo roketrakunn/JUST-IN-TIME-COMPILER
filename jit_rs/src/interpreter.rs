@@ -18,7 +18,7 @@
   + There is not machine code .. well atleast here.
  * */
 
-use std::{collections::hash_map, panic};
+use std::{collections::{HashMap, hash_map}, fmt::write, panic, thread::scope};
 use crate::parser::{Expr, Stmt , BinOpKind, UnaryOpKind , Program};
 
 
@@ -58,6 +58,79 @@ impl Value {
     }
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Int(n) => write!(f,"{}",n),
+            Value::Uint =>write!(f,"()")
+        }
+    }
+}
+
+
+/**
+ * ------ ENVIRONMENT(symbol table if you wanna)------
+ * Uses a stack of hashmaps to distinguish "scope"
+ * Imagine you lost your keys in a big house 
+ * YOu first would check maybe under the bed
+ * And the dining hall
+ * And then maybe the balcony and so on ..
+ * THat is the idea here.well that is the idea
+ */
+
+#[derive(Debug, Clone)]
+pub struct Env { 
+    //each hashmap is a "scope" functiomn body , if block , while..etc
+    scopes : Vec<HashMap<String, Value>>
+}
+
+impl Env {
+    
+    //start with one global scope
+    pub fn new() -> Self {
+        Env { scopes: vec![HashMap::new()] }
+    }
+
+    /**Push a new scope */
+    pub fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    //store a variable in teh current inner most scope
+
+    pub fn set(&mut self , name:&str , value :Value) {
+
+        //walk from the inner most to outer , update if found
+        for scope in self.scopes.iter_mut().rev() { 
+            if scope.contains_key(name) {
+                scope.insert(name.to_string(), value);
+                return 
+            }
+        }
+
+        //if it is not found then create a new one in currnt scope
+        let last = self.scopes.last_mut().unwrap();
+        last.insert(name.to_string(), value);
+    }
+
+    /**get value if exist , looks it up from inner scope outwards.*/
+    pub fn get(&mut self , name:&str) ->Option<&Value> {
+        for scope in self.scopes .iter().rev() {
+            if let Some(val) = scope.get(name) { 
+                return Some(val);
+            }
+        }
+        None
+    }
+}
+
+
+
+    
 
 
 
