@@ -18,7 +18,7 @@
   + There is not machine code .. well atleast here.
  * */
 
-use std::{collections::{HashMap, hash_map}, fmt::write, panic, thread::scope};
+use std::{collections::{HashMap, hash_map}, env::{args, vars}, fmt::write, panic, thread::scope};
 use crate::parser::{Expr, Stmt , BinOpKind, UnaryOpKind , Program};
 
 
@@ -178,6 +178,10 @@ impl Interpreter {
         self.exec_stmts(program).unwrap_or(Value::Uint)
     }
 
+
+    //Loops thru every statementm , runs eac one , ? Means that
+    //if any statement returns Signal::Return , it will immediately bubbles
+    //up the call stack and stops.
     fn exec_stmts(&mut self ,stmts : &[Stmt])-> Result<Value , Signal> {
         let mut last = Value::Uint;
         for stmt in stmts { 
@@ -187,6 +191,7 @@ impl Interpreter {
     }
 
 
+    //handle one statement
     fn exec_stmt(&mut self, stmt :&Stmt) ->Result<Value , Signal> {
         match stmt {
             //On expression statement , evaluate it and return its value.
@@ -214,6 +219,7 @@ impl Interpreter {
         }
     }
 
+    // actual computations....
     fn eval_expr(&mut self, expr : &Expr) -> Result<Value,Signal> {
         
         match expr {
@@ -256,7 +262,7 @@ impl Interpreter {
                     },
                     BinOpKind::Mod => {
                         if r == 0 {panic!("Error mudulo by zero");}
-                        r % l
+                        l % r
                     }
 
                     BinOpKind::EqEq  => (l == r) as i64,
@@ -267,6 +273,7 @@ impl Interpreter {
                     BinOpKind::GtEq  => (l >= r) as i64,
 
                 };
+
                 Ok(Value::Int(results))
             }
             Expr::UnaryOp { op, expr } => {
@@ -277,6 +284,73 @@ impl Interpreter {
                     UnaryOpKind::Pos => val,
                 };
                 Ok(Value::Int(resulst))
+            }
+
+            Expr::If { cond, then_block, else_block } => { 
+                let cond_val = self.eval_expr(cond)?;
+                self.env.push_scope(); // make new scope/if block
+
+                let results = if cond_val.is_truthy() { //if cond is do wrk
+                    self.exec_stmts(then_block)? //do elif if available
+                } else if let Some(else_stmts) = else_block  {
+                    self.exec_stmts(else_stmts)?
+                } else { //else do nothing
+                    Value::Uint
+                };
+                self.env.pop_scope();// pop the scope //if does not live
+                Ok(results) // return results if available
+            }
+
+            //while(cond) {body...}
+            Expr::While { cond, body } => { 
+                let mut last = Value::Uint;
+
+                loop {
+                    let cond_val = self.eval_expr(cond)?;
+                    if !cond_val.is_truthy() {break ;}
+                    self.env.push_scope();
+                    last = self.exec_stmts(body)?;
+                    self.env.pop_scope();
+                }
+                Ok(last)
+            }
+
+            //function call : foo(1 , 2+3)
+            Expr::FnCall { name, args } => { 
+                let arg_values : Result<Vec<_>,_> = args.iter()
+                    .map(|a| self.eval_expr(a))
+                    .collect();
+                let arg_values = arg_values?;
+
+                // look up the function definition
+                let fn_def = self.functions.get(name)
+                    .cloned()
+                    .unwrap_or_else(|| panic!("Undefined function {}" ,name));
+                
+
+                if fn_def.params.len() != arg_values.len() {
+                    panic!("Function {} expects {} , but got{}",
+                        name,fn_def.params.len() , arg_values.len());
+                }
+
+                //create a new scope for the function.
+                self.env.push_scope();
+
+                // "Push parameters"
+                for (param , val) in fn_def.params.iter().zip(arg_values) {
+                    self.env.set(param,val);
+                }
+
+                //Run the fucntion body , catch any return statements if an
+                let result = match self.exec_stmts(&fn_def.body){
+                    Ok(val) => val,
+                    Err(Signal::Return(val)) => val,
+                };
+
+                self.env.pop_scope(); //get rid of the function's scope
+                                      //when done evaluating function body.
+                Ok(result)
+
             }
         }
     }
