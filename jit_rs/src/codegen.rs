@@ -1,4 +1,3 @@
-use std::{slice, thread::sleep_ms};
 
 /**
  * ---------THE CODE GENERATOR-------
@@ -73,7 +72,7 @@ impl  CodeBuffer {
     
     // sub %ebx , %eax         [29 D8]
      pub  fn sub_eax_ebx(&mut self) {
-         self.emit(0x28);
+         self.emit(0x29);
          self.emit(0xD8);
      }
 
@@ -114,7 +113,7 @@ impl  CodeBuffer {
      }
 
      //convert double to quad.
-     //sign exented eax  into eax:edx   [99]
+     //sign exented eax  into edx:eax   [99]
      fn cdq(&mut self) { 
          self.emit(0x99);
      }
@@ -130,7 +129,7 @@ impl  CodeBuffer {
      //iseful in lke mod divs 
      fn mov_eax_edx(&mut self) { 
          self.emit(0x89);
-         self.emit(0xF0);
+         self.emit(0xD0);
      }
 
 
@@ -143,13 +142,13 @@ impl  CodeBuffer {
 
      //push ebp             [55]
 
-     fn push_ebp(mut self) { 
+     fn push_ebp(&mut self) { 
          self.emit(0x55); 
      }
      
     //pop ebp             [5D]
 
-     fn pop_ebp(mut self) { 
+     fn pop_ebp(&mut self) { 
          self.emit(0x5D); 
      }
 
@@ -166,17 +165,104 @@ impl  CodeBuffer {
      }
      // sub imm8 , %esp     [83 EC imm8]
 
-     fn sub_esp_imm(&mut self , n :u8) {
+     fn sub_esp_imm8(&mut self , n :u8) {
          self.emit(0x83);
          self.emit(0xEC);
          self.emit(n);
      }
 
 
+    // mov %eax, disp8(%ebp)   [89 45 disp]   — store to stack slot
+    
+     fn  mov_to_stack(&mut self ,offset: i8) {
+         self.emit(0x89);
+         self.emit(0x45);
+         self.emit(offset as u8);
+     }
+
+    // mov disp8(%ebp), %eax   [8B 45 disp]   — load from stack slot
+
+
+     fn  mov_from_stack(&mut self ,offset: i8) {
+         self.emit(0x8B);
+         self.emit(0x45);
+         self.emit(offset as u8);
+     }
+
+     // functon prologue
+
+     fn prologue(&mut self , n_vars : usize) {
+         self.push_ebp();
+        self.mov_ebp_esp();
+
+         if n_vars > 0 { 
+             self.sub_esp_imm8((n_vars * 4) as u8);
+         }
+     }
+
+     //emit function epilogue
+
+     fn epilogue(&mut self) {
+         self.mov_esp_ebp();
+         self.pop_ebp();
+         self.ret();
+     }
+}
+
+// ------------- SYMBOL TABLE-------------
+// Uses varibles in stack offests 
+// uses hashmap  to build the table and store variables as keys 
+// offests as value.
+
+use std::{collections::HashMap, thread::panicking};
+
+
+pub struct  SymbolTable { 
+    vars :HashMap<String , i8>,
+    next_offest : i8,
 }
 
 
+impl SymbolTable {
+    //constructor....
+    pub fn new() ->Self {
+        SymbolTable {
+            vars: HashMap::new(),
+            next_offest: -4
+        }
+    }
+    //Add a new variable , if it exists , get its offest.
 
+    pub fn add(&mut self , name :&str)-> i8 {
+        if let Some(&offset) = self.vars.get(name) { 
+            return offset
+        }
+
+        let offset  = self.next_offest;
+        self.vars.insert(name.to_string(), offset);
+        self.next_offest -= 4;
+        offset
+    }
+
+    //gets a variable
+    //returns its offset on the stack if it exist s
+    //else panic and say its not defined in that env /scope
+    pub  fn get(&mut self, name :&str) -> i8 {
+        *self.vars.get(name)
+            .unwrap_or_else(|| panic!("Undefined variable '{}' ", name))
+    }
+
+    pub fn count(&self) -> usize {
+        self.vars.len()
+    }
+}
+
+// ----------THE CODE GENERATOR-------------
+
+pub struct CodeGen { 
+    pub buf :CodeBuffer , 
+    pub symbols : SymbolTable,
+}
 
 
 
