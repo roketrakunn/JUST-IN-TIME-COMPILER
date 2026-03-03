@@ -13,7 +13,7 @@
  *
  */
 
-use crate::parser::{Expr , BinOpKind , Stmt, UnaryOpKind , Program};
+use crate::parser::{BinOpKind, Expr, Program, Stmt, UnaryOpKind};
 
 /**
  * --- THE CODE BUFFER , 
@@ -262,6 +262,202 @@ impl SymbolTable {
 pub struct CodeGen { 
     pub buf :CodeBuffer , 
     pub symbols : SymbolTable,
+}
+
+impl CodeGen {
+    //new code buffer...
+    pub  fn new() -> Self{
+        CodeGen {
+            buf: CodeBuffer::new(),
+            symbols: SymbolTable::new()
+        }
+    }
+    // First pass :scan the AST  and collect all variable names
+    // so we can knwo how much stack space to we have to reserve
+    // for them
+
+    fn collect_vars(&mut self , program :&Program){
+        for stmt in program { 
+            self.collect_var_stmt(stmt);
+        }
+    }
+
+    //helper functio to collect variables
+    
+    fn collect_var_stmt(&mut self , stmt : &Stmt) {
+        match stmt {
+            Stmt::Expr(e) | Stmt::Return(e) => self.collect_vars_expr(e),
+            Stmt::FnDef {body ,..} => { 
+                for s in body { self.collect_var_stmt(s);}
+            }
+        }
+    }
+
+    fn collect_vars_expr(&mut self, expr : &Expr) {
+        match expr {
+            Expr::Assign { name, value } => { 
+                self.symbols.add(name);
+                self.collect_vars_expr(value);
+            }
+
+            Expr::BinOp { left, right,.. } => { 
+                self.collect_vars_expr(left);
+                self.collect_vars_expr(right);
+            }
+
+            Expr::UnaryOp {expr,..} => { 
+                self.collect_vars_expr(expr)
+            }
+
+            Expr::If { cond, then_block, else_block } => {
+                self.collect_vars_expr(cond);
+                for s in then_block { self.collect_var_stmt(s);}
+
+                if let Some(eb)  = else_block { 
+                    for s in eb {self.collect_var_stmt(s);}
+                }
+            }
+
+            Expr::While { cond, body } => { 
+                self.collect_vars_expr(cond);
+                for s in body {self.collect_var_stmt(s);}
+            }
+            _ => {}
+
+        }
+    }
+
+    //Main entry : generating code for the whole program
+
+    fn generate(&mut self , program :&Program) {
+        //first pass , collect all varible names
+        self.collect_vars(program);
+        let n_vars = self.symbols.count(); //number of variables
+
+        //emit prologue 
+        self.buf.prologue(n_vars);
+        
+        //emit code for each statement
+
+        for stmt in program { 
+            self.gen_stmt(stmt);
+        } 
+        //emit epilogue
+        self.buf.epilogue();
+    }
+
+    fn  gen_stmt(&mut self , stmt :&Stmt) {
+
+        match stmt {
+            Stmt::Expr(e) => {self.gen_expr(e);}
+            Stmt::Return(e) => { 
+                self.gen_expr(e);
+                self.buf.epilogue();
+            }
+
+            Stmt::FnDef {..} => { 
+                //for the jit part .. function definitions are
+                //not supported
+                //inteprter handles them : TO BE DONE LATER.
+                eprintln!("Warning: fn definitions not yet supported in JIT path");
+            }
+        }
+    }
+
+    //generate code for one expression 
+    //convenrtion = results is always on the left (eax) 
+    //after this call
+
+    fn gen_expr(&mut self  ,expr :&Expr){
+        match expr {
+        
+            //load immediate into eax
+
+            Expr::Number(n) => { 
+                self.buf.mov_eax_imm(*n as u32);
+            }
+
+            //load varible from stack into eax
+            Expr::Var(name) => { 
+                let offset = self.symbols.get(name);
+                self.buf.mov_from_stack(offset);
+            }
+
+            //evaluate rhs and store to stack
+
+            Expr::Assign { name, value } => { 
+                self.gen_expr(value);
+                let offset  = self.symbols.get(name);
+                self.buf.mov_to_stack(offset);
+            }
+
+            //Unary 
+
+            Expr::UnaryOp { op, expr } => { 
+                self.gen_expr(expr);
+                match op {
+                    UnaryOpKind::Neg => self.buf.neg_eax(),
+                    UnaryOpKind::Pos => {} //ignore + ,
+                }
+            }
+
+            // ----BINARY OPERATIONS---
+            // 1.   Evaluate left -> results in eax
+            // 2.   Push eax into the stack(saving it).
+            // 3.   Evaluate right -> results overwrite saved eax
+            // 4.   Mov eax -> ebx (right operand).
+            // 5.   Pop stack(get eax back) (left operand)
+            // 6.   Apply opration left(eax) OP right(ebx)
+
+            Expr::BinOp { op, left, right } => { 
+                self.gen_expr(left);
+                self.buf.push_eax();
+
+                self.gen_expr(right);
+                self.buf.mov_ebx_eax(); 
+                self.buf.pop_eax();
+
+
+                match op {
+
+                    BinOpKind::Add =>  self.buf.add_eax_ebx(),
+                    BinOpKind::Sub =>  self.buf.sub_eax_ebx(),
+                    BinOpKind::Mul =>  self.buf.imul_eax_ebx(),
+                    BinOpKind::Div => {
+                        self.buf.cdq();
+                        self.buf.idiv_ebx();
+                    }
+                    BinOpKind::Mod => { 
+                        self.buf.cdq();
+                        self.buf.idiv_ebx();
+                        self.buf.mov_eax_ebx(); // get remainder
+                    }
+
+                    _ => eprintln!("Warning: comparison ops not yet in JIT path"),
+                }
+            }
+
+            Expr::If { .. } | Expr::While { .. } => { 
+                                eprintln!("Warning: if/while not yet supported in JIT path — use interpreter");
+                self.buf.mov_eax_imm(0);
+            }
+
+            Expr::FnCall { .. } => { 
+                                eprintln!("Warning: function calls not yet in JIT path");
+                self.buf.mov_eax_imm(0);
+            }
+        }
+    }
+}
+
+//public convinient function 
+
+pub fn compile(source : &str) -> CodeBuffer {
+
+    let program = crate::parser::parse(source);
+    let mut cg = CodeGen::new();
+    cg.generate(&program);
+    cg.buf
 }
 
 
