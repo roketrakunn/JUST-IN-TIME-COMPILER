@@ -106,8 +106,72 @@ impl  CodeBuffer {
          self.emit(0xD8);
      }
 
-    // TO BE CONTINUED.......
-    //
+
+     //neg % eax        [F7 D8]
+     fn neg_eax(&mut self) {
+         self.emit(0xF7);
+         self.emit(0xD8);
+     }
+
+     //convert double to quad.
+     //sign exented eax  into eax:edx   [99]
+     fn cdq(&mut self) { 
+         self.emit(0x99);
+     }
+    
+     //idiv %ebx        [F7 FB]
+     fn idiv_ebx(&mut self) {
+         self.emit(0xF7);
+         self.emit(0xFB);
+     }
+
+     //mov %edc , %eax      [89 F0]
+     //move the remainder to eax after division 
+     //iseful in lke mod divs 
+     fn mov_eax_edx(&mut self) { 
+         self.emit(0x89);
+         self.emit(0xF0);
+     }
+
+
+     // ret     [C3]
+     fn ret (&mut self) {
+         self.emit(0xC3);
+     }
+
+      // ----------STACK INSTRUCTIONS--------
+
+     //push ebp             [55]
+
+     fn push_ebp(mut self) { 
+         self.emit(0x55); 
+     }
+     
+    //pop ebp             [5D]
+
+     fn pop_ebp(mut self) { 
+         self.emit(0x5D); 
+     }
+
+     //mov esp , ebp         [89 E5]
+     fn mov_ebp_esp(&mut self) {
+         self.emit(0x89);
+         self.emit(0xE5);
+     }
+
+      //mov esp , ebp         [89 EC]
+     fn mov_esp_ebp(&mut self) {
+         self.emit(0x89);
+         self.emit(0xEC);
+     }
+     // sub imm8 , %esp     [83 EC imm8]
+
+     fn sub_esp_imm(&mut self , n :u8) {
+         self.emit(0x83);
+         self.emit(0xEC);
+         self.emit(n);
+     }
+
 
 }
 
