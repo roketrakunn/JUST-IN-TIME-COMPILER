@@ -152,20 +152,23 @@ impl  CodeBuffer {
          self.emit(0x5D); 
      }
 
-     //mov esp , ebp         [89 E5]
+     // mov rbp, rsp        [48 89 E5]  (REX.W for 64-bit operands)
      fn mov_ebp_esp(&mut self) {
+         self.emit(0x48); // REX.W
          self.emit(0x89);
          self.emit(0xE5);
      }
 
-      //mov esp , ebp         [89 EC]
+     // mov rsp, rbp        [48 89 EC]  (REX.W for 64-bit operands)
      fn mov_esp_ebp(&mut self) {
+         self.emit(0x48); // REX.W
          self.emit(0x89);
          self.emit(0xEC);
      }
-     // sub imm8 , %esp     [83 EC imm8]
 
+     // sub rsp, imm8       [48 83 EC imm8]  (REX.W for 64-bit operands)
      fn sub_esp_imm8(&mut self , n :u8) {
+         self.emit(0x48); // REX.W
          self.emit(0x83);
          self.emit(0xEC);
          self.emit(n);
