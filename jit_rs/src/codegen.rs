@@ -219,12 +219,10 @@ impl  CodeBuffer {
 
 use std::{collections::HashMap, thread::panicking};
 
-
 pub struct  SymbolTable { 
     vars :HashMap<String , i8>,
     next_offest : i8,
 }
-
 
 impl SymbolTable {
     //constructor....
@@ -286,7 +284,7 @@ impl CodeGen {
     }
 
     //helper functio to collect variables
-    
+
     fn collect_var_stmt(&mut self , stmt : &Stmt) {
         match stmt {
             Stmt::Expr(e) | Stmt::Return(e) => self.collect_vars_expr(e),
@@ -350,7 +348,6 @@ impl CodeGen {
     }
 
     fn  gen_stmt(&mut self , stmt :&Stmt) {
-
         match stmt {
             Stmt::Expr(e) => {self.gen_expr(e);}
             Stmt::Return(e) => { 

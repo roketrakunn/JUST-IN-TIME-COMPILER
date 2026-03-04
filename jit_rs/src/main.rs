@@ -1,4 +1,3 @@
-
 #![allow(dead_code, unused_imports)]
 
 mod lexer;
@@ -21,6 +20,8 @@ fn main() {
     let buf = codegen::compile("x = 10; y = 7; x + y;");
     let result = executor::execute(&buf);
     println!("result: {}", result); // should print 17
+
+
 }
 
 
