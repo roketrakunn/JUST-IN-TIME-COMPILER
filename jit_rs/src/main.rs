@@ -17,9 +17,13 @@ fn main() {
     println!("result: {}", result); // should print 13
     
 
-    let buf = codegen::compile("x = 10; y = 7; x + y;");
+    let buf = codegen::compile("x = 10; y = 3; x -(-y);");
     let result = executor::execute(&buf);
     println!("result: {}", result); // should print 17
+                                    
+    let buf = codegen::compile("x = 12; y = 3; x % (-y);");
+    let result = executor::execute(&buf);
+    println!("result: {}", result); // should print 15
 
 
 }

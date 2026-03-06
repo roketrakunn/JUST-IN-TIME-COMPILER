@@ -1,4 +1,4 @@
-use libc;
+use libc::{self, prlimit64};
 use crate::codegen::CodeBuffer;
 
 pub fn execute(buf: &CodeBuffer) -> i32 {
