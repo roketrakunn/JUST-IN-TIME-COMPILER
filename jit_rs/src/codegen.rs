@@ -13,7 +13,7 @@
  *
  */
 
-use crate::parser::{BinOpKind, Expr, Program, Stmt, UnaryOpKind};
+use crate::{interpreter::Value, parser::{BinOpKind, Expr, Program, Stmt, UnaryOpKind}};
 
 /**
  * --- THE CODE BUFFER , 
@@ -210,14 +210,100 @@ impl  CodeBuffer {
          self.pop_ebp();
          self.ret();
      }
+
+     pub fn emit_je_rel32(&mut self) -> usize {
+         self.emit(0x0F);
+         self.emit(0x84);
+         let patch_pos = self.current_pos(); 
+         self.emit_u32(0);
+         patch_pos
+     }
+
+     pub  fn emit_jmp_rel32(&mut self) -> usize {
+         self.emit(0xE9);
+         let patch_pos = self.current_pos(); 
+         self.emit_u32(0);
+         patch_pos
+     }
+
+     pub fn current_pos(&self) -> usize { 
+         self.bytes.len()
+     }
+
+     pub fn patch_u32(&mut self , pos: usize , val :  u32) {
+         self.bytes[pos]    =(val & 0xFF) as u8;
+         self.bytes[pos+1]  = ((val >> 8) & 0xFF) as u8;
+         self.bytes[pos+2]  = ((val >> 16) & 0xFF) as u8;
+         self.bytes[pos+3]  = ((val >> 24) & 0xFF) as u8;
+     }
+
+     pub  fn cmp_eax_ebx(&mut self){ 
+        self.emit(0x39);
+        self.emit(0xD8);
+     }
+
+     // equals to
+     pub fn sete_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0x94);
+         self.emit(0xC0);
+     }
+
+     //not equals to.
+     pub fn setne_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0x95);
+         self.emit(0xC0);
+     }
+
+     //less than 
+     pub fn setl_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0x9C);
+         self.emit(0xC0);
+     }
+
+     // greater than
+     pub fn setg_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0x9F);
+         self.emit(0xC0);
+     }
+
+     //less of equal to
+     pub fn setle_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0x9E);
+         self.emit(0xC0); 
+     }
+
+     //greater of equal to
+     pub fn setge_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0x9D);
+         self.emit(0xC0);
+     }
+
+     //move Z flag value from al to eax
+     pub fn movzx_eax_al(&mut self) {
+         self.emit(0x0F);
+         self.emit(0xB6);
+         self.emit(0xC0);
+     }
+
+     pub fn test_eax_eax(&mut self) { 
+         self.emit(0x85);
+         self.emit(0xC0); 
+     }
 }
+
 
 // ------------- SYMBOL TABLE-------------
 // Uses varibles in stack offests 
 // uses hashmap  to build the table and store variables as keys 
 // offests as value.
 
-use std::{collections::HashMap, thread::panicking};
+use std::{collections::HashMap, i32, mem::offset_of, thread::sleep_ms, usize};
 
 pub struct  SymbolTable { 
     vars :HashMap<String , i8>,
@@ -364,6 +450,11 @@ impl CodeGen {
         }
     }
 
+    fn gen_stmts(&mut self , stmts : &[Stmt]) { 
+        for stmt in stmts { 
+            self.gen_stmt(stmt);
+        }
+    }
     //generate code for one expression 
     //convenrtion = results is always on the left (eax) 
     //after this call
@@ -372,7 +463,6 @@ impl CodeGen {
         match expr {
         
             //load immediate into eax
-
             Expr::Number(n) => { 
                 self.buf.mov_eax_imm(*n as u32);
             }
@@ -392,7 +482,6 @@ impl CodeGen {
             }
 
             //Unary 
-
             Expr::UnaryOp { op, expr } => { 
                 self.gen_expr(expr);
                 match op {
@@ -419,7 +508,6 @@ impl CodeGen {
 
 
                 match op {
-
                     BinOpKind::Add =>  self.buf.add_eax_ebx(),
                     BinOpKind::Sub =>  self.buf.sub_eax_ebx(),
                     BinOpKind::Mul =>  self.buf.imul_eax_ebx(),
@@ -433,14 +521,87 @@ impl CodeGen {
                         self.buf.mov_eax_ebx(); // get remainder
                     }
 
-                    _ => eprintln!("Warning: comparison ops not yet in JIT path"),
+                    BinOpKind::EqEq => { 
+                        self.buf.cmp_eax_ebx();
+                        self.buf.sete_al();
+                        self.buf.movzx_eax_al();
+                    }
+
+                    BinOpKind::NotEq=> { 
+                        self.buf.cmp_eax_ebx();
+                        self.buf.setne_al();
+                        self.buf.movzx_eax_al();
+                    }
+
+                    BinOpKind::Lt=> { 
+                        self.buf.cmp_eax_ebx();
+                        self.buf.setl_al();
+                        self.buf.movzx_eax_al();
+                    }
+                    BinOpKind::Gt=> { 
+                        self.buf.cmp_eax_ebx();
+                        self.buf.setg_al();
+                        self.buf.movzx_eax_al();
+                    }
+                    BinOpKind::LtEq=> { 
+                        self.buf.cmp_eax_ebx();
+                        self.buf.setle_al();
+                        self.buf.movzx_eax_al();
+                    }
+                    BinOpKind::GtEq=> { 
+                        self.buf.cmp_eax_ebx();
+                        self.buf.setge_al();
+                        self.buf.movzx_eax_al();
+                    }
+
                 }
             }
+            Expr::If { cond, then_block, else_block } => { 
 
-            Expr::If { .. } | Expr::While { .. } => { 
-                                eprintln!("Warning: if/while not yet supported in JIT path — use interpreter");
-                self.buf.mov_eax_imm(0);
+                self.gen_expr(cond); // eval condition
+
+                self.buf.test_eax_eax(); // test eax ZF is eax is 0 ( False)
+
+                let je_patch = self.buf.emit_je_rel32();
+                self.gen_stmts(then_block);
+
+                let jmp_patch = self.buf.emit_jmp_rel32();
+                let else_start  = self.buf.emit_jmp_rel32();
+
+                self.buf.patch_u32(je_patch,(else_start as i32 -(je_patch as i32 + 4)) as u32);
+
+                if let Some(else_stmts) = else_block { 
+                    self.gen_stmts(else_stmts);
+                }
+
+                let end = self.buf.current_pos();
+
+                self.buf.patch_u32(jmp_patch,(end as i32 -(jmp_patch as i32 + 4)) as u32);
             }
+            Expr::While { cond, body } => {
+                // record where the loop starts — we jump back here each iteration
+                let loop_start = self.buf.current_pos();
+
+                // evaluate condition → eax
+                self.gen_expr(cond);
+                self.buf.test_eax_eax();
+
+                // je → end  (exit loop if condition is false)
+                let je_patch = self.buf.emit_je_rel32();
+
+                // emit loop body
+                self.gen_stmts(body);
+
+                // jmp → loop_start  (go back — offset will be negative)
+                let jmp_patch = self.buf.emit_jmp_rel32();
+                let back = loop_start as i32 - (jmp_patch as i32 + 4);
+                self.buf.patch_u32(jmp_patch, back as u32);
+
+                // patch je → here (after the jmp, loop is done)
+                let end = self.buf.current_pos();
+                self.buf.patch_u32(je_patch, (end as i32 - (je_patch as i32 + 4)) as u32);
+            }
+
 
             Expr::FnCall { .. } => { 
                                 eprintln!("Warning: function calls not yet in JIT path");
