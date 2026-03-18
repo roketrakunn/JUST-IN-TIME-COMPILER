@@ -277,7 +277,7 @@ impl  CodeBuffer {
          self.emit(0xC0); 
      }
 
-     //greater of equal to
+     //greater or equal to
      pub fn setge_al(&mut self) {
          self.emit(0x0F);
          self.emit(0x9D);
@@ -303,7 +303,7 @@ impl  CodeBuffer {
 // uses hashmap  to build the table and store variables as keys 
 // offests as value.
 
-use std::{collections::HashMap, i32, mem::offset_of, thread::sleep_ms, usize};
+use std::{collections::HashMap, i32, mem::offset_of,usize};
 
 pub struct  SymbolTable { 
     vars :HashMap<String , i8>,
@@ -370,7 +370,6 @@ impl CodeGen {
     }
 
     //helper functio to collect variables
-
     fn collect_var_stmt(&mut self , stmt : &Stmt) {
         match stmt {
             Stmt::Expr(e) | Stmt::Return(e) => self.collect_vars_expr(e),
@@ -415,7 +414,6 @@ impl CodeGen {
     }
 
     //Main entry : generating code for the whole program
-
     fn generate(&mut self , program :&Program) {
         //first pass , collect all varible names
         self.collect_vars(program);
@@ -449,7 +447,6 @@ impl CodeGen {
             }
         }
     }
-
     fn gen_stmts(&mut self , stmts : &[Stmt]) { 
         for stmt in stmts { 
             self.gen_stmt(stmt);
@@ -566,7 +563,7 @@ impl CodeGen {
                 self.gen_stmts(then_block);
 
                 let jmp_patch = self.buf.emit_jmp_rel32();
-                let else_start  = self.buf.emit_jmp_rel32();
+                let else_start = self.buf.current_pos();
 
                 self.buf.patch_u32(je_patch,(else_start as i32 -(je_patch as i32 + 4)) as u32);
 
@@ -581,27 +578,26 @@ impl CodeGen {
             Expr::While { cond, body } => {
                 // record where the loop starts — we jump back here each iteration
                 let loop_start = self.buf.current_pos();
-
+                
                 // evaluate condition → eax
                 self.gen_expr(cond);
                 self.buf.test_eax_eax();
 
-                // je → end  (exit loop if condition is false)
+                // je  end  (exit loop if condition is false)
                 let je_patch = self.buf.emit_je_rel32();
 
                 // emit loop body
                 self.gen_stmts(body);
 
-                // jmp → loop_start  (go back — offset will be negative)
+                // jmp  loop_start  (go back — offset will be negative)
                 let jmp_patch = self.buf.emit_jmp_rel32();
                 let back = loop_start as i32 - (jmp_patch as i32 + 4);
                 self.buf.patch_u32(jmp_patch, back as u32);
 
-                // patch je → here (after the jmp, loop is done)
+                // patch je  here (after the jmp, loop is done)
                 let end = self.buf.current_pos();
                 self.buf.patch_u32(je_patch, (end as i32 - (je_patch as i32 + 4)) as u32);
             }
-
 
             Expr::FnCall { .. } => { 
                                 eprintln!("Warning: function calls not yet in JIT path");
