@@ -45,4 +45,16 @@ fn main() {
     // --- fn in while condition ---
     let result = execute(&compile("fn gt(a, b) { a > b; } x = 0; while (gt(x, 5) == 0) { x = x + 1; }; x;"));
     println!("while gt: {} (expected 6)", result);
+
+    // --- x = add(1,2) + add(3,4) ---
+    let result = execute(&compile("fn add(a, b) { a + b; } x = add(1, 2) + add(3, 4); x;"));
+    println!("x = add(1,2) + add(3,4): {} (expected 10)", result);
+
+    // --- if add(2,3) * 2 == 10 ---
+    let result = execute(&compile("fn add(a, b) { a + b; } if (add(2, 3) * 2 == 10) { 99; } else { 0; };"));
+    println!("if add(2,3)*2==10: {} (expected 99)", result);
+
+    // --- while with fn in condition ---
+    let result = execute(&compile("fn add(a, b) { a + b; } fn inc(a) { a + 1; } x = 0; while (x < add(4, 6)) { x = inc(x); }; x;"));
+    println!("while x < add(4,6), inc(x): {} (expected 10)", result);
 }

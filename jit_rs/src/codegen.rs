@@ -729,7 +729,7 @@ impl CodeGen {
                     self.buf.emit(0x48); //REX.W
                     self.buf.emit(0x83); // add rsp , imm8
                     self.buf.emit(0xC4);
-                    self.buf.emit((args.len() * 4) as u8);
+                    self.buf.emit((args.len() * 8) as u8); 
                 }
             
             }
