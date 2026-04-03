@@ -303,7 +303,7 @@ impl  CodeBuffer {
 // uses hashmap  to build the table and store variables as keys 
 // offests as value.
 
-use std::{collections::HashMap, i32, mem::offset_of,usize};
+use std::{collections::HashMap, env::args, i32, mem::offset_of, ptr::slice_from_raw_parts, usize};
 
 pub struct  SymbolTable { 
     vars :HashMap<String , i8>,
@@ -386,6 +386,58 @@ impl CodeGen {
             fn_nodes: HashMap::new(),
         }
     }
+
+    //functons helper--------
+
+    fn compile(&mut self,name: &str , params : &[String], body: &[Stmt]) -> FnNode {
+        let mut node = FnNode::new(name.to_string(), params.to_vec());
+
+
+        for (i , param) in params.iter().enumerate()  {
+            let offset = 16 + (i * 8);
+            node.locals.vars.insert(param.clone(),  offset as i8);
+        }
+
+        //save the codegen's  codebuffer and ist symbol table 
+        //beecause we want to replace what it has with node.buf and symbol
+        //like borrowing its super powers 
+        let saved_buf = std::mem::replace(&mut self.buf,CodeBuffer::new());
+        let saved_symbols = std::mem::replace(&mut self.symbols
+            ,SymbolTable::new());
+
+
+        //do the replace here 
+        std::mem::swap(&mut self.buf, &mut node.buffer);
+        std::mem::swap(&mut self.symbols, &mut node.locals);
+
+
+        for stmt in body { 
+            self.collect_var_stmt(stmt);
+        }
+        let n_vars = self.symbols.count();
+
+        //compile the stuff quick quick 
+
+        self.buf.prologue(n_vars);
+        for stmt in body { 
+            self.gen_stmt(stmt);
+        }
+        self.buf.epilogue();
+
+        std::mem::swap(&mut self.buf, &mut node.buffer);
+        std::mem::swap(&mut self.symbols, &mut node.locals);
+
+        self.buf = saved_buf;
+        self.symbols = saved_symbols;
+
+        node
+        
+    }
+
+
+    //----END OF FUNCTIONS HELPERS-----
+
+
     // First pass :scan the AST  and collect all variable names
     // so we can knwo how much stack space to we have to reserve
     // for them
@@ -400,7 +452,7 @@ impl CodeGen {
     fn collect_var_stmt(&mut self , stmt : &Stmt) {
         match stmt {
             Stmt::Expr(e) | Stmt::Return(e) => self.collect_vars_expr(e),
-            Stmt::FnDef {body ,..} => { 
+            Stmt::FnDef {body:_ ,..} => { 
                 {}
             }
         }
@@ -446,6 +498,32 @@ impl CodeGen {
         self.collect_vars(program);
         let n_vars = self.symbols.count(); //number of variables
 
+        for stmt in program { 
+            if let Stmt::FnDef { name, params, body } = stmt { 
+                let node = self.compile(name, params, body);
+                self.fn_nodes.insert(name.clone(), node);
+            }
+        }
+
+        // jmp over function bodies — executor starts at byte 0 so we skip to main
+        self.buf.emit(0xE9);
+        let jmp_patch = self.buf.current_pos();
+        self.buf.emit_u32(0);
+
+        for (name , node) in &self.fn_nodes  {
+            let offset = self.buf.current_pos();
+            self.fn_table.insert(name.clone(), offset);
+            for byte in &node.buffer.bytes {
+                self.buf.emit(*byte);
+            }
+        }
+
+        // patch jmp to here (start of main code)
+        let main_start = self.buf.current_pos();
+        let rel = main_start as i32 - (jmp_patch as i32 + 4);
+        self.buf.patch_u32(jmp_patch, rel as u32);
+
+
         //emit prologue 
         self.buf.prologue(n_vars);
         
@@ -470,7 +548,7 @@ impl CodeGen {
                 //for the jit part .. function definitions are
                 //not supported
                 //inteprter handles them : TO BE DONE LATER.
-                eprintln!("Warning: fn definitions not yet supported in JIT path");
+                {}
             }
         }
     }
@@ -495,6 +573,7 @@ impl CodeGen {
             Expr::Var(name) => { 
                 let offset = self.symbols.get(name);
                 self.buf.mov_from_stack(offset);
+
             }
 
             //evaluate rhs and store to stack
@@ -626,9 +705,33 @@ impl CodeGen {
                 self.buf.patch_u32(je_patch, (end as i32 - (je_patch as i32 + 4)) as u32);
             }
 
-            Expr::FnCall { .. } => { 
-                                eprintln!("Warning: function calls not yet in JIT path");
-                self.buf.mov_eax_imm(0);
+            Expr::FnCall { name, args } => { 
+
+                for arg in args.iter().rev() { 
+                    self.gen_expr(arg);
+                    self.buf.push_eax();
+                }
+                
+                //call the function 
+
+                let target = *self.fn_table.get(name)
+                    .unwrap_or_else(|| panic!("undefined function {}" , name));
+
+
+                // calling rel32
+                self.buf.emit(0xE8);
+                let patch_pos = self.buf.current_pos();
+                self.buf.emit_u32(0);
+                let rel =  target as i32  - (patch_pos as i32 + 4);
+                self.buf.patch_u32(patch_pos, rel as u32);
+
+                if !args.is_empty() { 
+                    self.buf.emit(0x48); //REX.W
+                    self.buf.emit(0x83); // add rsp , imm8
+                    self.buf.emit(0xC4);
+                    self.buf.emit((args.len() * 4) as u8);
+                }
+            
             }
         }
     }

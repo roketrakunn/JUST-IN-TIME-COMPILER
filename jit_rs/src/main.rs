@@ -9,33 +9,36 @@ mod codegen;
 mod executor;
 
 fn main() {
-    // compile "2 + 3" and run it
-    let buf = codegen::compile("2 + 3;");
-    let result = executor::execute(&buf);
-    println!("result: {}", result); // should print 5
+    // --- original tests ---
+    let result = execute(&compile("2 + 3;"));
+    println!("2 + 3 = {} (expected 5)", result);
 
-    let buf = codegen::compile("x = 10; x + 3;");
-    let result = executor::execute(&buf);
-    println!("result: {}", result); // should print 13
-    
+    let result = execute(&compile("x = 10; x + 3;"));
+    println!("x=10, x+3 = {} (expected 13)", result);
 
-    let buf = codegen::compile("x = 10; y = 3; x -(-y);");
-    let result = executor::execute(&buf);
-    println!("result: {}", result); // should print 17
-                                    
-    let buf = codegen::compile(" x = 5 ; if ( x > 3 ) { x = 99;};");
-    let result = executor::execute(&buf);
-    println!("result: {}", result); 
+    let result = execute(&compile("x = 10; y = 3; x -(-y);"));
+    println!("x-(-y) = {} (expected 13)", result);
 
-    // else branch — should print 0
-    let buf = codegen::compile("x = 2; if (x > 3) { x = 99; } else { x = 0; }; x;");
-    let result = executor::execute(&buf);
-    println!("else branch: {}", result);
+    let result = execute(&compile("x = 5; if (x > 3) { x = 99; };"));
+    println!("if x>3 then x=99: {} (expected 99)", result);
 
-    // while loop — should print 10 (adds 2 five times)
-    let buf = codegen::compile("x = 0; y = 0; while (y < 5) { x = x + 2; y = y + 1; }; x;");
-    let result = executor::execute(&buf);
-    println!("while result: {}", result);
+    let result = execute(&compile("x = 2; if (x > 3) { x = 99; } else { x = 0; }; x;"));
+    println!("else branch: {} (expected 0)", result);
+
+    let result = execute(&compile("x = 0; y = 0; while (y < 5) { x = x + 2; y = y + 1; }; x;"));
+    println!("while loop: {} (expected 10)", result);
+
+    // --- function tests ---
+    let result = execute(&compile("fn add() { x = 5; } add();"));
+    println!("fn no args: {} (expected 5)", result);
+
+    let result = execute(&compile("fn double() { x = 10; x = x + x; } double();"));
+    println!("fn double: {} (expected 20)", result);
+
+    let result = execute(&compile("fn add(a, b) { a + b; } add(3, 7);"));
+    println!("fn add(3,7): {} (expected 10)", result);
+
+    // --- fn in if condition ---
+    let result = execute(&compile("fn add(a, b) { a + b; } if (add(2, 3) == 5) { 99; } else { 0; };"));
+    println!("if add(2,3)==5: {} (expected 99)", result);
 }
-
-
