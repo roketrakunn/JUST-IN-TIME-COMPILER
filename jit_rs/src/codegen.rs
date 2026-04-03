@@ -344,11 +344,36 @@ impl SymbolTable {
     }
 }
 
-// ----------THE CODE GENERATOR-------------
 
+// -----FUNCTIONS STUFF----------
+
+pub  struct FnNode { 
+    pub name: String,
+    pub params: Vec<String>, 
+    pub locals: SymbolTable,
+    pub  buffer: CodeBuffer
+}
+
+impl FnNode {
+    pub fn new(name: String , params: Vec<String> ) -> Self {
+        FnNode { 
+            name, 
+            params, 
+            locals: SymbolTable::new(), 
+            buffer: CodeBuffer::new(), 
+        }
+    }
+}
+
+//-----END OF FUNCTION  STUFF ------
+
+
+// ----------THE CODE GENERATOR-------------
 pub struct CodeGen { 
     pub buf :CodeBuffer , 
     pub symbols : SymbolTable,
+    pub fn_table: HashMap<String, usize>,
+    pub fn_nodes: HashMap<String , FnNode>,
 }
 
 impl CodeGen {
@@ -356,7 +381,9 @@ impl CodeGen {
     pub  fn new() -> Self{
         CodeGen {
             buf: CodeBuffer::new(),
-            symbols: SymbolTable::new()
+            symbols: SymbolTable::new(),
+            fn_table: HashMap::new(),
+            fn_nodes: HashMap::new(),
         }
     }
     // First pass :scan the AST  and collect all variable names
@@ -374,7 +401,7 @@ impl CodeGen {
         match stmt {
             Stmt::Expr(e) | Stmt::Return(e) => self.collect_vars_expr(e),
             Stmt::FnDef {body ,..} => { 
-                for s in body { self.collect_var_stmt(s);}
+                {}
             }
         }
     }
