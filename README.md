@@ -1,94 +1,65 @@
 # JIT Compiler
 
-A simple Just-In-Time(JIT) compiler that parses arithmetic expressions and generates x86 machine code for direct execution at runtime.
+A Just-In-Time compiler written in Rust that parses a custom language and generates x86-64 machine code for direct execution at runtime.
 
 ## Features
 
-- **Full expression parsing** - Supports complex arithmetic expressions with proper operator precedence
-- **Runtime code generation** - Generates x86 machine code on-the-fly
-- **Arithmetic operations** - Addition, subtraction, and multiplication
-- **Operator precedence** - Correctly handles `*` before `+` and `-`
-- **Parentheses support** - Group expressions with `(` and `)`
-- **Direct execution** - Executes generated machine code directly on the CPU using `mmap`
+- **Full expression parsing** - Arithmetic with correct operator precedence
+- **Variables** - Assignment and retrieval via stack-allocated slots
+- **Control flow** - `if/else` and `while` with backpatching
+- **Functions** - Definitions with parameters, isolated scope, return values via `eax`
+- **Comparison operators** - `==`, `!=`, `<`, `>`, `<=`, `>=`
+- **Unary operators** - Negation (`-x`)
+- **Runtime code generation** - Emits x86-64 machine code on-the-fly
+- **Direct execution** - Runs generated code via `mmap` with `PROT_EXEC`
 
 ## Building
 
 ```bash
-gcc -o jit jit.c -Wall -Wextra -m32
-./jit
+cd jit_rs
+cargo run
 ```
 
 **Requirements:**
-- GCC compiler
-- 32-bit compilation support (`gcc-multilib` on 64-bit Linux)
-- x86 architecture
+- Rust (stable)
+- Linux x86-64
 
 ## Examples
 
-The compiler can parse and execute expressions like:
-
 ```
-5 + 10          → 15
-20 - 5          → 15
-5 * 3           → 15
-(5 + 10) * 2    → 30
-10 + 5 * 2      → 20  (multiplication first!)
-100 - 50 - 25   → 25  (left-to-right evaluation)
-100 / 5 
-(100 + 5) % 10
-(-5 + 3 ) % 2  
--5 - +3  = -8
-THIS IS NEW ;)
-x = 5; x                   → 5
-x = 5; x * 2               → 10
-x = 5; y = 10; x + y       → 15
-a = 10; b = 20; a + b * 2  → 50
-x = -5; x + 10             → 5
-x = 10; y = 3; x % y       → 1
-
+2 + 3                                        → 5
+x = 10; x + 3                                → 13
+x = 5; if (x > 3) { x = 99; }               → 99
+x = 2; if (x > 3) { x = 99; } else { x = 0; }  → 0
+x = 0; y = 0; while (y < 5) { x = x + 2; y = y + 1; }; x   → 10
+fn add(a, b) { a + b; } add(3, 7)           → 10
+fn add(a, b) { a + b; } if (add(2, 3) == 5) { 99; } else { 0; }  → 99
 ```
 
 ## How It Works
 
-1. **Lexer** - Tokenizes the input string into numbers and operators
-2. **Parser** - Builds an Abstract Syntax Tree (AST) with proper precedence
-3. **Code Generator** - Walks the AST and emits x86 machine code
-4. **Executor** - Allocates executable memory and runs the generated code
+1. **Lexer** (`lexer.rs`) — tokenizes source into `Vec<Token>`
+2. **Parser** (`parser.rs`) — recursive descent, builds an AST of `Expr` / `Stmt` nodes
+3. **Codegen** (`codegen.rs`) — walks the AST, emits x86-64 bytes into a `CodeBuffer`
+4. **Executor** (`executor.rs`) — `mmap`s executable memory, copies bytes in, calls it as a function
 
-## Technical Details
+### Codegen architecture
 
-- Uses recursive descent parsing for expression evaluation
-- Generates 32-bit x86 machine code (targeting EAX/EBX registers)
-- Stack-based evaluation for nested expressions
-- Memory-mapped executable pages via `mmap` with `PROT_EXEC`
+- `SymbolTable` — maps variable names to `rbp`-relative stack offsets
+- `FnNode` — each function compiles into its own isolated buffer with its own symbol table
+- `CodeGen` holds a global symbol table, a function registry (`fn_table`), and the master buffer
+- Function bodies are stitched into the master buffer first; a `jmp` at byte 0 skips over them to main code
+- Parameters are passed on the stack and read via positive `rbp` offsets (`+16`, `+24`, ...)
+- Control flow (`if/else`, `while`) uses `je`/`jmp` with backpatching
 
 ## Development Status
 
-✅ Phase 1: Code generation and execution (COMPLETE)  
-✅ Phase 2: Lexer and tokenizer (COMPLETE)  
-✅ Phase 3: Full expression parser with precedence (COMPLETE)  
-✅ Phase 4: Division operator  + modulo oparator (%) (COMPLETE) 
-✅ Phase 5: Unary operation awareness ("-5 + 3 = -2") (COMPLETE)
-✅ Phase 6: Variables and assignment  (currently working on this)
-⏳ Phase 7: Control flow (if/else, loops)
-⏳ Phase 8: Craft an interpreter and make this the new rurst lol.
-
-## Future Enhancements
-
-- ✅ Division and modulo operators
-- ✅ Unary operators (negation)
-- ✅ Variable storage and retrieval
-- [ ] Function definitions
-- [ ] Comparison operators and conditionals
-- [ ] Optimization passes
-
-## Learning Resources
-
-This project demonstrates:
-- Compiler design principles
-- x86 assembly programming
-- Memory management and system calls
-- Abstract syntax trees
-- Recursive descent parsing
-
-
+✅ Phase 1: x86 code generation and execution  
+✅ Phase 2: Lexer and tokenizer  
+✅ Phase 3: Full expression parser with precedence  
+✅ Phase 4: Division and modulo  
+✅ Phase 5: Unary operators  
+✅ Phase 6: Variables and assignment  
+✅ Phase 7: Control flow — if/else and while  
+✅ Phase 8: Functions with isolated scope and argument passing  
+⏳ Phase 9: Interpreter + globals + recursive functions  
