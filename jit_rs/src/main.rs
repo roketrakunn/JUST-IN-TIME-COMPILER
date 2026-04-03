@@ -41,4 +41,8 @@ fn main() {
     // --- fn in if condition ---
     let result = execute(&compile("fn add(a, b) { a + b; } if (add(2, 3) == 5) { 99; } else { 0; };"));
     println!("if add(2,3)==5: {} (expected 99)", result);
+
+    // --- fn in while condition ---
+    let result = execute(&compile("fn gt(a, b) { a > b; } x = 0; while (gt(x, 5) == 0) { x = x + 1; }; x;"));
+    println!("while gt: {} (expected 6)", result);
 }
