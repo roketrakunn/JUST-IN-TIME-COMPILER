@@ -63,6 +63,13 @@ fn main() {
   println!("global x in fn: {} (expected 20)", result);
 
 
+ let result = execute(&compile("fn fact(n) { if (n < 2) { 1; } else { n *
+   fact(n - 1); }; } fact(5);"));
+  println!("fact(5): {} (expected 120)", result);
+
+
+
+
 
 
 }

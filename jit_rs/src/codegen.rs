@@ -418,7 +418,8 @@ pub  struct FnNode {
     pub name: String,
     pub params: Vec<String>, 
     pub locals: SymbolTable,
-    pub  buffer: CodeBuffer
+    pub  buffer: CodeBuffer,
+    pub self_call_patches : Vec<usize>,
 }
 
 impl FnNode {
@@ -428,6 +429,7 @@ impl FnNode {
             params, 
             locals: SymbolTable::new(), 
             buffer: CodeBuffer::new(), 
+            self_call_patches: Vec::new()
         }
     }
 }
@@ -436,12 +438,14 @@ impl FnNode {
 
 
 // ----------THE CODE GENERATOR-------------
-pub struct CodeGen { 
-    pub buf :CodeBuffer , 
+pub struct CodeGen {
+    pub buf :CodeBuffer ,
     pub symbols : SymbolTable,
-    pub globals : GlobalTable, 
+    pub globals : GlobalTable,
     pub fn_table: HashMap<String, usize>,
     pub fn_nodes: HashMap<String , FnNode>,
+    pub current_fn_patches: Vec<usize>,  // patch positions for recursive self-calls
+    pub current_fn_name: Option<String>, // name of function being compiled
 }
 
 impl CodeGen {
@@ -450,16 +454,20 @@ impl CodeGen {
         CodeGen {
             buf: CodeBuffer::new(),
             symbols: SymbolTable::new(),
-            globals: GlobalTable::new(), //todo
+            globals: GlobalTable::new(),
             fn_table: HashMap::new(),
             fn_nodes: HashMap::new(),
+            current_fn_patches: Vec::new(),
+            current_fn_name: None,
         }
     }
 
     //functons helper--------
 
-    fn compile(&mut self,name: &str , params : &[String], body: &[Stmt]) -> FnNode {
+    fn compile(&mut self, name: &str , params : &[String], body: &[Stmt]) -> FnNode {
         let mut node = FnNode::new(name.to_string(), params.to_vec());
+        self.current_fn_name = Some(name.to_string());
+        self.current_fn_patches.clear();
 
 
         for (i , param) in params.iter().enumerate()  {
@@ -499,8 +507,9 @@ impl CodeGen {
         self.buf = saved_buf;
         self.symbols = saved_symbols;
 
+        node.self_call_patches = std::mem::take(&mut self.current_fn_patches);
+        self.current_fn_name = None;
         node
-        
     }
 
 
@@ -579,11 +588,17 @@ impl CodeGen {
         let jmp_patch = self.buf.current_pos();
         self.buf.emit_u32(0);
 
-        for (name , node) in &self.fn_nodes  {
-            let offset = self.buf.current_pos();
-            self.fn_table.insert(name.clone(), offset);
+        for (name, node) in &self.fn_nodes {
+            let fn_offset = self.buf.current_pos();
+            self.fn_table.insert(name.clone(), fn_offset);
             for byte in &node.buffer.bytes {
                 self.buf.emit(*byte);
+            }
+            // patch recursive self-calls now that we know the real offset
+            for &patch_pos in &node.self_call_patches {
+                let abs_patch = fn_offset + patch_pos;
+                let rel = fn_offset as i32 - (abs_patch as i32 + 4);
+                self.buf.patch_u32(abs_patch, rel as u32);
             }
         }
 
@@ -794,18 +809,21 @@ impl CodeGen {
                     self.buf.push_eax();
                 }
                 
-                //call the function 
-
-                let target = *self.fn_table.get(name)
-                    .unwrap_or_else(|| panic!("undefined function {}" , name));
-
-
-                // calling rel32
+                // call the function
                 self.buf.emit(0xE8);
                 let patch_pos = self.buf.current_pos();
                 self.buf.emit_u32(0);
-                let rel =  target as i32  - (patch_pos as i32 + 4);
-                self.buf.patch_u32(patch_pos, rel as u32);
+
+                if let Some(&target) = self.fn_table.get(name) {
+                    // known function — patch immediately
+                    let rel = target as i32 - (patch_pos as i32 + 4);
+                    self.buf.patch_u32(patch_pos, rel as u32);
+                } else if self.current_fn_name.as_deref() == Some(name) {
+                    // recursive self-call — record for later patching
+                    self.current_fn_patches.push(patch_pos);
+                } else {
+                    panic!("undefined function {}", name);
+                }
 
                 if !args.is_empty() { 
                     self.buf.emit(0x48); //REX.W
