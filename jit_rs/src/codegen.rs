@@ -22,6 +22,7 @@ use crate::{interpreter::Value, parser::{BinOpKind, Expr, Program, Stmt, UnaryOp
  * 
  */
 
+//simplicity is beauty!
 pub  struct CodeBuffer { 
     pub bytes : Vec<u8>,
 }
@@ -31,13 +32,17 @@ impl  CodeBuffer {
     fn new() -> Self { 
         CodeBuffer { bytes: Vec::with_capacity(1024)}
     }
-    //push one byte
+    //The one above all.
+    //Pure art at work.
     pub  fn emit(&mut self , byte : u8) {
         self.bytes.push(byte);
     }
 
     //push a 32 bit value in little-endian order
     //because x86 is little-edian(least significant byte first)
+    //This is the beauty of low level programming , pure art at work 
+    //mask -> shift -> emit -> and dance again.
+    //are you not getting code erection yet ?
 
     pub fn emit_u32(&mut self , value : u32) {
         self.emit((value & 0xFF) as u8); // first byte least sign
@@ -291,10 +296,39 @@ impl  CodeBuffer {
          self.emit(0xC0);
      }
 
-     pub fn test_eax_eax(&mut self) { 
+     pub fn test_eax_eax(&mut self) {
          self.emit(0x85);
-         self.emit(0xC0); 
+         self.emit(0xC0);
      }
+
+     // emit a 64-bit value little-endian
+     pub fn emit_u64(&mut self, value: u64) {
+         for i in 0..8 {
+             self.emit(((value >> (i * 8)) & 0xFF) as u8);
+         }
+     }
+
+    // store eax to absolute 64-bit address
+    // mov rcx, imm64  [48 B9 + 8 bytes]
+    // mov [rcx], eax  [89 01]
+    pub fn mov_mem_eax(&mut self, addr: u64) {
+        self.emit(0x48);
+        self.emit(0xB9);
+        self.emit_u64(addr);
+        self.emit(0x89);
+        self.emit(0x01);
+    }
+
+    // load eax from absolute 64-bit address
+    // mov rcx, imm64  [48 B9 + 8 bytes]
+    // mov eax, [rcx]  [8B 01]
+    pub fn mov_eax_mem(&mut self, addr: u64) {
+        self.emit(0x48);
+        self.emit(0xB9);
+        self.emit_u64(addr);
+        self.emit(0x8B);
+        self.emit(0x01);
+    }
 }
 
 
@@ -303,7 +337,7 @@ impl  CodeBuffer {
 // uses hashmap  to build the table and store variables as keys 
 // offests as value.
 
-use std::{collections::HashMap, env::args, i32, mem::offset_of, ptr::slice_from_raw_parts, usize};
+use std::{collections::HashMap, env::args, i32, mem::offset_of, ptr::slice_from_raw_parts, thread::sleep, usize};
 
 pub struct  SymbolTable { 
     vars :HashMap<String , i8>,
@@ -345,6 +379,39 @@ impl SymbolTable {
 }
 
 
+pub struct GlobalTable { 
+    vars: HashMap<String , u32>,// name 
+    next_adrr : u32,
+    base : u64                  //start of mmap'd region for globies
+}
+
+impl GlobalTable {
+    pub fn new()-> Self {
+        GlobalTable {
+            vars: HashMap::new(), 
+            next_adrr: 0, 
+            base: 0
+        }
+    }
+
+    pub fn add(&mut self, name :&str) -> u32 {
+        if let Some(&adrr) = self.vars.get(name) { 
+            return adrr;
+        }
+        let adrr = self.next_adrr;
+        self.vars.insert(name.to_string(), adrr);
+        self.next_adrr += 4;
+        adrr
+    }
+
+    pub fn get(&self , name :&str) -> Option<u32> {
+        self.vars.get(name).copied()
+    }
+}
+
+
+
+
 // -----FUNCTIONS STUFF----------
 
 pub  struct FnNode { 
@@ -372,6 +439,7 @@ impl FnNode {
 pub struct CodeGen { 
     pub buf :CodeBuffer , 
     pub symbols : SymbolTable,
+    pub globals : GlobalTable, 
     pub fn_table: HashMap<String, usize>,
     pub fn_nodes: HashMap<String , FnNode>,
 }
@@ -382,6 +450,7 @@ impl CodeGen {
         CodeGen {
             buf: CodeBuffer::new(),
             symbols: SymbolTable::new(),
+            globals: GlobalTable::new(), //todo
             fn_table: HashMap::new(),
             fn_nodes: HashMap::new(),
         }
@@ -461,7 +530,7 @@ impl CodeGen {
     fn collect_vars_expr(&mut self, expr : &Expr) {
         match expr {
             Expr::Assign { name, value } => { 
-                self.symbols.add(name);
+                self.globals.add(name);
                 self.collect_vars_expr(value);
             }
 
@@ -536,6 +605,7 @@ impl CodeGen {
         self.buf.epilogue();
     }
 
+
     fn  gen_stmt(&mut self , stmt :&Stmt) {
         match stmt {
             Stmt::Expr(e) => {self.gen_expr(e);}
@@ -569,20 +639,32 @@ impl CodeGen {
                 self.buf.mov_eax_imm(*n as u32);
             }
 
-            //load varible from stack into eax
-            Expr::Var(name) => { 
-                let offset = self.symbols.get(name);
+            Expr::Var(name) => {
+                if let Some(offset) = self.symbols.vars.get(name).copied() {
                 self.buf.mov_from_stack(offset);
 
+            } else {
+                let addr = self.globals.base + self.globals.get(name)
+                    .unwrap_or_else(|| panic!("Undefined variable '{}'", name)) as u64;
+
+                self.buf.mov_eax_mem(addr);
+                }
             }
 
-            //evaluate rhs and store to stack
-
-            Expr::Assign { name, value } => { 
+            Expr::Assign { name, value } => {
                 self.gen_expr(value);
-                let offset  = self.symbols.get(name);
-                self.buf.mov_to_stack(offset);
+
+                if let Some(offset) = self.symbols.vars.get(name).copied() {
+                    self.buf.mov_to_stack(offset);
+                } else {
+                    let addr = self.globals.base + self.globals.get(name)
+                        .unwrap_or_else(|| panic!("Undefined variable '{}'", name)) as u64;
+
+                    self.buf.mov_mem_eax(addr);
+                }
             }
+ 
+
 
             //Unary 
             Expr::UnaryOp { op, expr } => { 
@@ -743,6 +825,22 @@ pub fn compile(source : &str) -> CodeBuffer {
 
     let program = crate::parser::parse(source);
     let mut cg = CodeGen::new();
+
+    unsafe { 
+        let ptr = libc::mmap(
+            std::ptr::null_mut(),
+            256, 
+            libc::PROT_READ | libc::PROT_WRITE ,
+            libc::MAP_ANON | libc::MAP_PRIVATE, 
+            -1, 
+            0);
+
+        if ptr == libc::MAP_FAILED { 
+            panic!("globals mmap failed");
+        }
+        cg.globals.base = ptr as u64;
+    }
+
     cg.generate(&program);
     cg.buf
 }

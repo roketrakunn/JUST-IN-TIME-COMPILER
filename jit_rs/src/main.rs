@@ -57,4 +57,12 @@ fn main() {
     // --- while with fn in condition ---
     let result = execute(&compile("fn add(a, b) { a + b; } fn inc(a) { a + 1; } x = 0; while (x < add(4, 6)) { x = inc(x); }; x;"));
     println!("while x < add(4,6), inc(x): {} (expected 10)", result);
+
+     let result = execute(&compile("x = 10; fn double() { x + x; }
+        double();"));
+  println!("global x in fn: {} (expected 20)", result);
+
+
+
+
 }
