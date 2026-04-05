@@ -792,12 +792,10 @@ impl CodeGen {
                 // emit loop body
                 self.gen_stmts(body);
 
-                // jmp  loop_start  (go back — offset will be negative)
                 let jmp_patch = self.buf.emit_jmp_rel32();
                 let back = loop_start as i32 - (jmp_patch as i32 + 4);
                 self.buf.patch_u32(jmp_patch, back as u32);
 
-                // patch je  here (after the jmp, loop is done)
                 let end = self.buf.current_pos();
                 self.buf.patch_u32(je_patch, (end as i32 - (je_patch as i32 + 4)) as u32);
             }
